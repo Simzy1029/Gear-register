@@ -265,6 +265,11 @@ function cleanIntake(r,catIds){
   if(d){const [y,m,dd]=d.split('-').map(Number); if(m<1||m>12||dd<1||dd>31||y<1980||y>2100)d=''}
   return {name:s('name'),maker:s('maker'),model:s('model'),serial:s('serial'),mfgDate:d,cat:catIds.includes(r.category)?r.category:'',note:s('note')};
 }
+function pickJSON(text){
+  text=String(text||'');const a=text.indexOf('{'),b=text.lastIndexOf('}');
+  if(a<0||b<=a)return null;
+  try{return JSON.parse(text.slice(a,b+1))}catch(e){return null}
+}
 /*LOGIC-END*/
 
 const CATS_DEFAULT=[
@@ -451,7 +456,7 @@ M.reports=()=>{
   $('#view').innerHTML='<h2>Reports</h2><div class="card"><div class="rowbtns"><button class="btn pri" data-a="pdfRegister">Inspection register PDF</button><button class="btn" data-a="csvRegister">Gear list CSV</button><button class="btn" data-a="csvInsp">Inspection history CSV</button><button class="btn" data-a="labels">QR labels for my gear</button><button class="btn" data-a="blankTags">Print blank tags</button></div><p class="hint">Blank tags are new, unused codes. Stick them on, scan the pile, and the app adds every new code as gear in one go. Print on polyester label stock so they last.</p></div>'+
   '<h3>Inspection records</h3><div id="sessions" class="group"></div>'+
   '<h3>Import</h3><div class="card"><label class="btn" for="csvin">Import gear from CSV<input class="vh" id="csvin" type="file" accept=".csv,text/csv"></label><p class="hint">First row must be headings. Recognised columns: name, category, tag, serial, manufacturer, model, manufactured, first use, kit. Dates as 2026-03-14 or 14/03/2026.</p></div>'+
-  '<h3>Settings</h3><form class="card" data-form="settings">'+fld('Company or trading name','company',s.company||'')+fld('Inspector name','inspector',s.inspector||'')+fld('Prefix for new tag numbers','tagPrefix',s.tagPrefix||'GEAR-')+
+  '<h3>Settings</h3><form class="card" data-form="settings">'+fld('Company or trading name','company',s.company||'')+fld('Inspector name','inspector',s.inspector||'')+fld('Prefix for new tag numbers','tagPrefix',s.tagPrefix||'GEAR-')+(HOSTED?'':fld('Claude API key, for reading markings from photos (optional)','apiKey','','type="password" autocomplete="off" placeholder="'+(getKey()?'Saved on this phone. Type a new key to replace it.':'sk-ant-...')+'"')+'<p class="hint">The key stays on this phone, is left out of backups, and is sent only to Anthropic when you photograph markings. Each photo costs a small amount on your API account.'+(getKey()?' <button type="button" class="chip" data-a="forgetKey">Forget the key</button>':'')+'</p>')+
   '<div class="catrow h"><span>Category</span><span>Inspect every (months)</span><span>Service life (years)</span></div><div id="catrows" class="group">'+cats().map(catRow).join('')+'</div><button type="button" class="btn quiet" data-a="addCat">Add category</button><p class="hint">Service life 0 means no fixed limit. Clear a name to remove that category. These are starting values. Set them to match the maker\'s instructions and the standard you work to.</p><button class="btn pri">Save settings</button></form>'+
   '<div class="card"><p class="hint" id="storenote"></p><div class="rowbtns"><button class="btn" data-a="backup">Back up everything</button><label class="btn" for="restore">Restore a backup<input class="vh" id="restore" type="file" accept=".json,application/json"></label></div><div class="rowbtns"><button class="btn quiet" data-a="examples">Load example gear</button><button class="btn quiet" data-a="rmExamples">Remove example gear</button></div></div>';
   $('#csvin').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)importCSV(f)});
@@ -508,17 +513,40 @@ function nextNum(){
   const p=S.settings.tagPrefix||'GEAR-';
   return Math.max(parseInt(nextTag(all('items'),p).slice(p.length),10)||1,+S.settings.tagNext||1);
 }
+const KEY_AT='gearreg.apikey';   // kept apart from the register so it never lands in a backup file
+const getKey=()=>{try{return localStorage.getItem(KEY_AT)||''}catch(e){return ''}};
+const setKey=k=>{try{k?localStorage.setItem(KEY_AT,k):localStorage.removeItem(KEY_AT)}catch(e){}};
+async function apiRead(key,prompt,file){
+  const c=await toCanvas(file,1568),b64=c.toDataURL('image/jpeg',.85).split(',')[1];
+  let res;
+  try{res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-sonnet-5-5',max_tokens:600,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:prompt}]}]})})}
+  catch(e){throw {code:'offline'}}
+  if(!res.ok){
+    let m='';try{m=((await res.json()).error||{}).message||''}catch(e){}
+    throw {code:res.status===401||res.status===403?'bad_key':res.status===429?'rate_limited':/credit|billing/i.test(m)?'no_credit':res.status===404?'bad_model':'upstream_error',message:m};
+  }
+  const j=await res.json(),out=pickJSON((j.content||[]).filter(x=>x.type==='text').map(x=>x.text).join(''));
+  if(!out)throw {code:'invalid_json'};
+  return out;
+}
+async function photoReader(){   // a function (prompt, file) -> object, 'nokey', or null when unavailable
+  if(!HOSTED){const k=getKey();return k?(p,f)=>apiRead(k,p,f):'nokey'}
+  const sample=await use('sample'); if(!sample)return null;
+  const lim=await sample.limits().catch(()=>null); if(!lim||!lim.images)return null;
+  return (p,f)=>sample.json(p,{images:[f]});
+}
 const SNAP_ERR={not_granted:1,sampling_disabled:1,not_declared:1,capability_disabled:1,capability_removed:1,images_unavailable:1};
 async function armSnap(){
-  const sample=await use('sample'); if(!sample||!$('#snapbox'))return;
-  const lim=await sample.limits().catch(()=>null); if(!lim||!lim.images||!$('#snapbox'))return;
+  const read=await photoReader(); if(!read||!$('#snapbox'))return;
   $('#snapbox').hidden=false;
+  if(read==='nokey'){$('#snapbox').innerHTML='<p class="hint">Want the app to read make, model, serial and date from a photo? Add a Claude API key under Reports, then Settings.</p>';return}
   $('#snap').addEventListener('change',async e=>{
     const f=e.target.files[0];e.target.value='';if(!f)return;
     const msg=$('#snapmsg');msg.textContent='Reading the markings. This can take up to a minute.';
     const prompt='The photo shows a piece of rope access, height safety or rigging equipment, or its label or stamped markings. Read only what is visibly printed, stamped or engraved. Do not guess. If the maker\'s serial format encodes the date of manufacture and you are sure of the format, decode it and say so in note.\n\nReply with only a JSON object with these string fields, using "" for anything not clearly readable:\n{"name": short item name such as "Petzl I\'D S descender", "maker": "", "model": "", "serial": "", "mfgDate": "YYYY-MM-DD or YYYY-MM", "category": one id from the list below, "note": "anything the user should double check, under 20 words"}\n\nCategory ids:\n'+cats().map(c=>c.id+' = '+c.name).join('\n');
     try{
-      const r=cleanIntake(await sample.json(prompt,{images:[f]}),cats().map(c=>c.id));
+      const r=cleanIntake(await read(prompt,f),cats().map(c=>c.id));
       if(!$('#snapbox'))return;
       let n=0;const set=(id,v)=>{const el=$('#f-'+id);if(v&&el){el.value=v;n++}};
       set('name',r.name);set('maker',r.maker);set('model',r.model);set('serial',r.serial);set('mfgDate',r.mfgDate);set('cat',r.cat);
@@ -526,7 +554,7 @@ async function armSnap(){
     }catch(err){
       const c=err&&err.code; if(!$('#snapbox'))return;
       if(SNAP_ERR[c]){$('#snapbox').hidden=true;return toast('Photo reading isn\'t available in this view. Type the details in.')}
-      msg.textContent=c==='rate_limited'?'Claude is busy or you have reached a usage limit. Try again later.':c==='image_rejected'?'That photo couldn\'t be used. Try another.':c==='session_expired'?'Sign in to Claude again, then retry.':'The markings couldn\'t be read. Try a closer, sharper photo.';
+      msg.textContent=c==='rate_limited'?'Claude is busy or you have reached a usage limit. Try again later.':c==='image_rejected'?'That photo couldn\'t be used. Try another.':c==='session_expired'?'Sign in to Claude again, then retry.':c==='bad_key'?'The API key was rejected. Check it under Reports, then Settings.':c==='no_credit'?'Your Claude API account has no credit. Top it up, then retry.':c==='offline'?'No connection. Photo reading needs signal.':c==='bad_model'?'The reading service has changed. Tell Claude so the app can be updated.':'The markings couldn\'t be read. Try a closer, sharper photo.';
     }
   });
 }
@@ -581,6 +609,7 @@ const A={
   pdfSession:async d=>{const s=S.insp.get(d.id);const rows=[['Tag','Item','Category','Serial','Result']];s.entries.forEach(e=>{const it=S.items.get(e.itemId)||{},c=catById(it.cat);rows.push([e.tag||it.tag||'',e.name||it.name||'',c?c.name:'',it.serial||'',e.result==='fail'?'FAIL':'Pass'])});await pdf(TYPES[s.type||'periodic']+' record','inspection-'+s.date+'.pdf','Inspected '+fmtDate(s.date)+' by '+(s.inspector||'')+(s.notes?'.  Notes: '+s.notes:''),rows,s.inspector)},
   labels:makeLabels,
   blankTags:()=>sheet('<h2>Print blank tags</h2><form data-form="blankTags"><div class="two">'+fld('How many','count','40','type="number" min="1" max="200" inputmode="numeric" required')+fld('First number','start',nextNum(),'type="number" min="1" max="999999" inputmode="numeric" required')+'</div>'+sel('QR size','size',[['18','Small, 18 mm (karabiners, devices)'],['26','Medium, 26 mm'],['38','Large, 38 mm (bags, helmets)']],'26')+'<p class="hint">Codes start with '+esc(S.settings.tagPrefix||'GEAR-')+'. Change the prefix under Settings.</p><button class="btn pri">Make tags</button></form>'),
+  forgetKey:()=>{setKey('');M.reports();refresh();toast('API key removed from this phone.')},
   closePrint:()=>{$('#printview').hidden=true;$('#printview').innerHTML=''},
   doPrint:()=>{try{window.print()}catch(e){toast('Printing isn\'t available here.')}},
   startLive:startLive,
@@ -634,6 +663,7 @@ const F={
   settings:async d=>{
     const cs=[...document.querySelectorAll('#catrows .catrow')].map(r=>({id:r.dataset.id,name:r.querySelector('[data-k=name]').value.trim(),interval:Math.max(0,+r.querySelector('[data-k=interval]').value||0),life:Math.max(0,+r.querySelector('[data-k=life]').value||0)})).filter(c=>c.name);
     if(!cs.length)return toast('Keep at least one category.');
+    if(d.apiKey&&d.apiKey.trim())setKey(d.apiKey.trim());
     if(await safe(()=>putSettings({...S.settings,company:d.company.trim(),inspector:d.inspector.trim(),tagPrefix:d.tagPrefix.trim()||'GEAR-',cats:cs}),'Settings saved.'))M.reports(),refresh();
   }
 };
