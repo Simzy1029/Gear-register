@@ -132,6 +132,16 @@ dt{color:var(--muted)} dd{margin:0;overflow-wrap:anywhere}
 #live.hit #livevid{border-color:var(--accent)}
 .livebar{background:var(--bg);display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
 .livebar b{font:700 30px/1 var(--display)}
+#printview{position:fixed;inset:0;z-index:7;background:#fff;color:#000;overflow:auto;padding:0 12px 24px}
+#printview[hidden]{display:none}
+.pv-bar{position:sticky;top:0;background:#fff;display:flex;gap:8px;align-items:center;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top)) 0 10px;font-size:13px}
+.pv-bar .btn{color:#14191a;background:#fff;border-color:#14191a}.pv-bar .btn.pri{background:#ffd21f}
+.lg{display:grid;gap:3mm;grid-template-columns:repeat(auto-fill,minmax(calc(var(--q) + 6mm),1fr))}
+.lb{border:1px dashed #999;padding:2mm;text-align:center;break-inside:avoid;font:10px Arial,sans-serif;color:#000}
+.lb svg{width:var(--q);height:var(--q);display:block;margin:0 auto}
+.lb b{display:block;font:bold 11px monospace}
+.lb span{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+@media print{.app,#sheet,#toast,#live,.pv-bar{display:none!important}#printview{position:static;padding:0;overflow:visible}html,body{height:auto;background:#fff}@page{margin:8mm}}
 #toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:4px;font-size:14px;max-width:calc(100% - 32px);z-index:9;text-align:center}
 #toast[hidden]{display:none}
 @media (max-width:400px){.two{grid-template-columns:1fr}.brand span{display:none}}
@@ -155,6 +165,7 @@ dt{color:var(--muted)} dd{margin:0;overflow-wrap:anywhere}
 </div>
 <div id="sheet" hidden></div>
 <div id="live" hidden><video id="livevid" playsinline muted></video><div class="livebar"><div><b id="livecount">0</b> in batch<br><span class="sub" id="livelast">Point the camera at a tag</span></div><button class="btn pri" data-a="stopLive">Done</button></div></div>
+<div id="printview" hidden></div>
 <div id="toast" role="status" hidden></div>
 
 <script>
@@ -245,6 +256,15 @@ function nextTag(items,prefix){
   for(const it of items){const t=normCode(it.tag);if(t.startsWith(p)){const n=parseInt(t.slice(p.length),10);if(n>max)max=n}}
   return prefix+String(max+1).padStart(4,'0');
 }
+function tagRun(prefix,start,count){const o=[];for(let i=0;i<count;i++)o.push(prefix+String(start+i).padStart(4,'0'));return o}
+// Tidy what the photo reader returns: strings only, known category only, real dates only.
+function cleanIntake(r,catIds){
+  r=r&&typeof r==='object'?r:{};
+  const s=k=>typeof r[k]==='string'?r[k].trim().slice(0,120):'';
+  let d=s('mfgDate'); if(/^\d{4}-\d{2}$/.test(d))d+='-01'; d=parseDate(d);
+  if(d){const [y,m,dd]=d.split('-').map(Number); if(m<1||m>12||dd<1||dd>31||y<1980||y>2100)d=''}
+  return {name:s('name'),maker:s('maker'),model:s('model'),serial:s('serial'),mfgDate:d,cat:catIds.includes(r.category)?r.category:'',note:s('note')};
+}
 /*LOGIC-END*/
 
 const CATS_DEFAULT=[
@@ -265,6 +285,7 @@ const CATS_DEFAULT=[
 const LIBS={
   jsqr:'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
   qr:'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js',
+  zx:'https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js',
   pdf:'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
 };
 const PATH={items:'items',kits:'kits',insp:'inspections'};
@@ -384,7 +405,7 @@ R.gear=()=>{
 };
 
 M.scan=()=>{
-  $('#view').innerHTML='<h2>Mass scan</h2>'+(LIVE?'<button class="btn pri big" data-a="startLive">Scan live</button>':'')+'<label class="btn '+(LIVE?'':'pri ')+'big" for="cam">Photograph tags<input class="vh" id="cam" type="file" accept="image/*" capture="environment"></label><div class="rowbtns"><label class="btn" for="pics">Choose photos<input class="vh" id="pics" type="file" accept="image/*" multiple></label><button class="btn" data-a="paste">Paste a list</button></div><form class="scanform" data-form="code"><label class="vh" for="code">Tag code or serial</label><input id="code" name="code" placeholder="Type or scan a code" autocomplete="off" autocapitalize="characters" enterkeyhint="done"><button class="btn">Add</button></form><p class="hint" id="scanmsg">'+(LIVE?'Scan live reads tags one after another as you sweep the camera over them. Or photograph a group of tags':'Lay the gear out, photograph the QR tags')+', and every code in the photo joins the batch. A Bluetooth barcode or RFID reader types straight into the box above.</p><div id="batch" class="group"></div>';
+  $('#view').innerHTML='<h2>Mass scan</h2>'+(LIVE?'<button class="btn pri big" data-a="startLive">Scan live</button>':'')+'<label class="btn '+(LIVE?'':'pri ')+'big" for="cam">Photograph tags<input class="vh" id="cam" type="file" accept="image/*" capture="environment"></label><div class="rowbtns"><label class="btn" for="pics">Choose photos<input class="vh" id="pics" type="file" accept="image/*" multiple></label><button class="btn" data-a="paste">Paste a list</button></div><form class="scanform" data-form="code"><label class="vh" for="code">Tag code or serial</label><input id="code" name="code" placeholder="Type or scan a code" autocomplete="off" autocapitalize="characters" enterkeyhint="done"><button class="btn">Add</button></form><p class="hint" id="scanmsg">'+(LIVE?'Scan live reads tags one after another as you sweep the camera over them. Or photograph a group of tags':'Lay the gear out, photograph the QR tags')+', and every code in the photo joins the batch. Makers\' own data matrix marks are on trial: they may read, one at a time. A Bluetooth barcode or RFID reader types straight into the box above.</p><div id="batch" class="group"></div>';
   const onPick=e=>{const f=[...e.target.files];e.target.value='';readPhotos(f)};
   $('#cam').addEventListener('change',onPick);$('#pics').addEventListener('change',onPick);
 };
@@ -427,7 +448,7 @@ R.due=()=>{
 
 M.reports=()=>{
   const s=S.settings;
-  $('#view').innerHTML='<h2>Reports</h2><div class="card"><div class="rowbtns"><button class="btn pri" data-a="pdfRegister">Inspection register PDF</button><button class="btn" data-a="csvRegister">Gear list CSV</button><button class="btn" data-a="csvInsp">Inspection history CSV</button><button class="btn" data-a="labels">QR label sheet</button></div><p class="hint">The label sheet makes a QR code for every tagged item. Print it on sticker paper or laminate the tags.</p></div>'+
+  $('#view').innerHTML='<h2>Reports</h2><div class="card"><div class="rowbtns"><button class="btn pri" data-a="pdfRegister">Inspection register PDF</button><button class="btn" data-a="csvRegister">Gear list CSV</button><button class="btn" data-a="csvInsp">Inspection history CSV</button><button class="btn" data-a="labels">QR labels for my gear</button><button class="btn" data-a="blankTags">Print blank tags</button></div><p class="hint">Blank tags are new, unused codes. Stick them on, scan the pile, and the app adds every new code as gear in one go. Print on polyester label stock so they last.</p></div>'+
   '<h3>Inspection records</h3><div id="sessions" class="group"></div>'+
   '<h3>Import</h3><div class="card"><label class="btn" for="csvin">Import gear from CSV<input class="vh" id="csvin" type="file" accept=".csv,text/csv"></label><p class="hint">First row must be headings. Recognised columns: name, category, tag, serial, manufacturer, model, manufactured, first use, kit. Dates as 2026-03-14 or 14/03/2026.</p></div>'+
   '<h3>Settings</h3><form class="card" data-form="settings">'+fld('Company or trading name','company',s.company||'')+fld('Inspector name','inspector',s.inspector||'')+fld('Prefix for new tag numbers','tagPrefix',s.tagPrefix||'GEAR-')+
@@ -476,11 +497,38 @@ function openItem(id){
   '<h3>Inspection history</h3>'+(hist.length?hist.map(s=>{const e=s.entries.find(e=>e.itemId===id);return '<div class="irow"><span>'+fmtDate(s.date)+'<br><span class="sub">'+TYPES[s.type||'periodic']+' · '+esc(s.inspector||'')+(s.notes?' · '+esc(s.notes):'')+'</span></span><span class="pill p-'+(e.result==='fail'?'overdue':'ok')+'">'+(e.result==='fail'?'Fail':'Pass')+'</span></div>'}).join(''):'<p class="hint">No inspections recorded yet.</p>'));
 }
 function itemForm(id){
-  const it=id?S.items.get(id):{cat:cats()[0].id,tag:nextTag(all('items'),S.settings.tagPrefix||'GEAR-')};
+  const it=id?S.items.get(id):{cat:cats()[0].id,tag:tagRun(S.settings.tagPrefix||'GEAR-',nextNum(),1)[0]};
   const c=catById(it.cat)||cats()[0];
-  sheet('<h2>'+(id?'Edit gear':'Add gear')+'</h2><form data-form="item" data-id="'+(id||'')+'">'+fld('Name','name',it.name||'','required placeholder="e.g. Petzl I\'D S descender"')+sel('Category','cat',catOpts(),it.cat)+
+  sheet('<h2>'+(id?'Edit gear':'Add gear')+'</h2><div id="snapbox" hidden><label class="btn" for="snap">Fill in from a photo of the markings<input class="vh" id="snap" type="file" accept="image/*" capture="environment"></label><p class="hint" id="snapmsg" style="margin-top:6px">Photograph the label or stamped markings. Claude reads the make, model, serial and date for you.</p></div><form data-form="item" data-id="'+(id||'')+'">'+fld('Name','name',it.name||'','required placeholder="e.g. Petzl I\'D S descender"')+sel('Category','cat',catOpts(),it.cat)+
   '<div class="two">'+fld('Tag code','tag',it.tag||'','autocapitalize="characters"')+fld('Maker\'s serial number','serial',it.serial||'')+'</div><div class="two">'+fld('Manufacturer','maker',it.maker||'')+fld('Model','model',it.model||'')+'</div><div class="two">'+fld('Date of manufacture','mfgDate',it.mfgDate||'','type="date"')+fld('Date of first use','firstUse',it.firstUse||'','type="date"')+'</div><div class="two">'+fld('Inspect every (months)','intervalMonths',it.intervalMonths==null?'':it.intervalMonths,'type="number" min="0" max="60" inputmode="numeric" placeholder="Category default: '+c.interval+'"')+fld('Service life (years)','lifeYears',it.lifeYears==null?'':it.lifeYears,'type="number" min="0" max="50" inputmode="numeric" placeholder="Category default: '+(c.life||'none')+'"')+'</div>'+sel('Kit','kit',kitOpts(),it.kit)+
   '<label class="fld" for="f-notes">Notes<textarea id="f-notes" name="notes">'+esc(it.notes||'')+'</textarea></label><button class="btn pri">'+(id?'Save changes':'Add to register')+'</button></form>');
+  armSnap();
+}
+function nextNum(){
+  const p=S.settings.tagPrefix||'GEAR-';
+  return Math.max(parseInt(nextTag(all('items'),p).slice(p.length),10)||1,+S.settings.tagNext||1);
+}
+const SNAP_ERR={not_granted:1,sampling_disabled:1,not_declared:1,capability_disabled:1,capability_removed:1,images_unavailable:1};
+async function armSnap(){
+  const sample=await use('sample'); if(!sample||!$('#snapbox'))return;
+  const lim=await sample.limits().catch(()=>null); if(!lim||!lim.images||!$('#snapbox'))return;
+  $('#snapbox').hidden=false;
+  $('#snap').addEventListener('change',async e=>{
+    const f=e.target.files[0];e.target.value='';if(!f)return;
+    const msg=$('#snapmsg');msg.textContent='Reading the markings. This can take up to a minute.';
+    const prompt='The photo shows a piece of rope access, height safety or rigging equipment, or its label or stamped markings. Read only what is visibly printed, stamped or engraved. Do not guess. If the maker\'s serial format encodes the date of manufacture and you are sure of the format, decode it and say so in note.\n\nReply with only a JSON object with these string fields, using "" for anything not clearly readable:\n{"name": short item name such as "Petzl I\'D S descender", "maker": "", "model": "", "serial": "", "mfgDate": "YYYY-MM-DD or YYYY-MM", "category": one id from the list below, "note": "anything the user should double check, under 20 words"}\n\nCategory ids:\n'+cats().map(c=>c.id+' = '+c.name).join('\n');
+    try{
+      const r=cleanIntake(await sample.json(prompt,{images:[f]}),cats().map(c=>c.id));
+      if(!$('#snapbox'))return;
+      let n=0;const set=(id,v)=>{const el=$('#f-'+id);if(v&&el){el.value=v;n++}};
+      set('name',r.name);set('maker',r.maker);set('model',r.model);set('serial',r.serial);set('mfgDate',r.mfgDate);set('cat',r.cat);
+      msg.textContent=n?'Filled in '+n+' fields. Check each one against the gear before saving.'+(r.note?' Note: '+r.note:''):'Nothing readable in that photo. Try a closer, sharper shot of the markings.';
+    }catch(err){
+      const c=err&&err.code; if(!$('#snapbox'))return;
+      if(SNAP_ERR[c]){$('#snapbox').hidden=true;return toast('Photo reading isn\'t available in this view. Type the details in.')}
+      msg.textContent=c==='rate_limited'?'Claude is busy or you have reached a usage limit. Try again later.':c==='image_rejected'?'That photo couldn\'t be used. Try another.':c==='session_expired'?'Sign in to Claude again, then retry.':'The markings couldn\'t be read. Try a closer, sharper photo.';
+    }
+  });
 }
 function inspectSheet(ids){
   const its=ids.map(id=>({...S.items.get(id),id})).filter(i=>i.name);
@@ -532,6 +580,9 @@ const A={
   pdfRegister:async()=>{const r=registerRows(false);if(r.length<2)return toast('Add some gear first.');await pdf('Gear inspection register','gear-inspection-register-'+todayStr()+'.pdf','As at '+fmtDate(todayStr()),r)},
   pdfSession:async d=>{const s=S.insp.get(d.id);const rows=[['Tag','Item','Category','Serial','Result']];s.entries.forEach(e=>{const it=S.items.get(e.itemId)||{},c=catById(it.cat);rows.push([e.tag||it.tag||'',e.name||it.name||'',c?c.name:'',it.serial||'',e.result==='fail'?'FAIL':'Pass'])});await pdf(TYPES[s.type||'periodic']+' record','inspection-'+s.date+'.pdf','Inspected '+fmtDate(s.date)+' by '+(s.inspector||'')+(s.notes?'.  Notes: '+s.notes:''),rows,s.inspector)},
   labels:makeLabels,
+  blankTags:()=>sheet('<h2>Print blank tags</h2><form data-form="blankTags"><div class="two">'+fld('How many','count','40','type="number" min="1" max="200" inputmode="numeric" required')+fld('First number','start',nextNum(),'type="number" min="1" max="999999" inputmode="numeric" required')+'</div>'+sel('QR size','size',[['18','Small, 18 mm (karabiners, devices)'],['26','Medium, 26 mm'],['38','Large, 38 mm (bags, helmets)']],'26')+'<p class="hint">Codes start with '+esc(S.settings.tagPrefix||'GEAR-')+'. Change the prefix under Settings.</p><button class="btn pri">Make tags</button></form>'),
+  closePrint:()=>{$('#printview').hidden=true;$('#printview').innerHTML=''},
+  doPrint:()=>{try{window.print()}catch(e){toast('Printing isn\'t available here.')}},
   startLive:startLive,
   stopLive:stopLive,
   backup:()=>saveFile('gear-register-backup-'+todayStr()+'.json',JSON.stringify({app:'gear-register',v:1,items:[...S.items],kits:[...S.kits],insp:[...S.insp],settings:S.settings})),
@@ -567,6 +618,14 @@ const F={
     fails.forEach(e=>jobs.push(()=>put('items',e.itemId,{...S.items.get(e.itemId),status:'quar',updatedAt:Date.now()},true)));
     if(!S.settings.inspector)jobs.push(()=>putSettings({...S.settings,inspector:d.inspector.trim()}));
     await bulk(jobs,'Inspection saved. '+(entries.length-fails.length)+' passed'+(fails.length?', '+fails.length+' failed and quarantined.':'.'));
+  },
+  blankTags:async d=>{
+    const n=Math.min(200,Math.max(1,+d.count||0)),start=Math.max(1,+d.start||1),p=S.settings.tagPrefix||'GEAR-';
+    const codes=tagRun(p,start,n),taken=new Set(all('items').map(i=>normCode(i.tag))),clash=codes.filter(c=>taken.has(normCode(c)));
+    if(clash.length)return toast(clash[0]+' is already on an item. Pick a higher first number.');
+    closeSheet();
+    if(await showLabels(codes.map(c=>({code:c,name:''})),+d.size||26,'blank-gear-tags-'+codes[0]+'.html'))
+      await safe(()=>putSettings({...S.settings,tagNext:Math.max(+S.settings.tagNext||1,start+n)}));
   },
   kit:async(d,f)=>{
     const id=f.dataset.id||newId('k'),old=S.kits.get(id)||{};
@@ -621,7 +680,17 @@ async function decodePhoto(file){
     blank(ctx,r.location);
     await wait(0);
   }
+  if(!out.length){try{await lib('zx')}catch(e){} const t=zxDecode(await toCanvas(file,1400)); if(t)out.push(t)}
   return out;
+}
+let zxReader=null;
+function zxDecode(canvas){   // trial: makers' Data Matrix marks and plain barcodes, where the browser has no built-in reader
+  try{
+    const Z=window.ZXing; if(!Z)return null;
+    if(!zxReader){const h=new Map();h.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.DATA_MATRIX,Z.BarcodeFormat.CODE_128,Z.BarcodeFormat.CODE_39,Z.BarcodeFormat.EAN_13]);h.set(Z.DecodeHintType.TRY_HARDER,true);zxReader=new Z.MultiFormatReader();zxReader.setHints(h)}
+    const r=zxReader.decodeWithState(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(canvas))));
+    return (r&&r.getText())||null;
+  }catch(e){return null}
 }
 function blank(ctx,L){   // paint over a decoded code so the next pass finds another
   ctx.fillStyle='#fff';ctx.beginPath();ctx.moveTo(L.topLeftCorner.x,L.topLeftCorner.y);
@@ -643,10 +712,11 @@ async function startLive(){
   catch(e){return toast(e&&e.name==='NotAllowedError'?'Camera access is blocked. Allow the camera for this site, or use Photograph tags.':'No camera could be opened. Use Photograph tags instead.')}
   let det=null;
   if('BarcodeDetector' in window){try{det=new BarcodeDetector()}catch(e){}}
-  if(!det){try{await lib('jsqr')}catch(e){stopLive();return toast('The scanner couldn\'t load. Connect to the internet once, then try again.')}}
+  if(!det){lib('zx').catch(()=>{});try{await lib('jsqr')}catch(e){stopLive();return toast('The scanner couldn\'t load. Connect to the internet once, then try again.')}}
   const v=$('#livevid'),el=$('#live'),c=document.createElement('canvas'),ctx=c.getContext('2d',{willReadFrequently:true});
   v.srcObject=liveStream;el.hidden=false;try{await v.play()}catch(e){}
   liveOn=true;$('#livecount').textContent=S.batch.length;$('#livelast').textContent='Point the camera at a tag';
+  let frame=0;
   const tick=async()=>{
     if(!liveOn)return;
     if(v.readyState>=2&&v.videoWidth){
@@ -656,6 +726,7 @@ async function startLive(){
         else{
           const k=Math.min(1,960/Math.max(v.videoWidth,v.videoHeight));c.width=v.videoWidth*k|0;c.height=v.videoHeight*k|0;ctx.drawImage(v,0,0,c.width,c.height);
           for(let i=0;i<4;i++){const img=ctx.getImageData(0,0,c.width,c.height),r=jsQR(img.data,c.width,c.height,{inversionAttempts:'dontInvert'});if(!r)break;if(r.data)found.push(r.data);blank(ctx,r.location)}
+          if(!found.length&&++frame%3===0){const t=zxDecode(c);if(t)found.push(t)}
         }
       }catch(e){}
       if(liveOn&&found.length&&addCodes(parseCodes(found.join('\n')))){
@@ -728,9 +799,19 @@ async function pdf(title,filename,sub,rows,signer){
 async function makeLabels(){
   const its=all('items').filter(i=>i.tag&&i.status!=='retired').sort((a,b)=>a.tag.localeCompare(b.tag,undefined,{numeric:true}));
   if(!its.length)return toast('No tagged gear yet. Give items a tag code first.');
-  try{await lib('qr')}catch(e){return toast('The QR builder couldn\'t load. Check your connection.')}
-  const cells=its.map(i=>{const q=qrcode(0,'M');q.addData(i.tag);q.make();return '<div class="l">'+q.createSvgTag(3,6)+'<b>'+esc(i.tag)+'</b><span>'+esc(i.name)+'</span></div>'}).join('');
-  await saveFile('gear-qr-labels.html','<!DOCTYPE html><html><head><meta charset="utf-8"><title>Gear QR labels</title><style>@page{margin:8mm}body{font:10px Arial,sans-serif;margin:0}.g{display:grid;grid-template-columns:repeat(5,1fr);gap:3mm}.l{border:1px dashed #999;padding:2mm;text-align:center;break-inside:avoid}.l svg{width:26mm;height:26mm;display:block;margin:0 auto}.l b{display:block;font:bold 11px monospace}.l span{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}</style></head><body><div class="g">'+cells+'</div></body></html>');
+  await showLabels(its.map(i=>({code:i.tag,name:i.name})),26,'gear-qr-labels.html');
+}
+const LABEL_CSS='.lg{display:grid;gap:3mm;grid-template-columns:repeat(auto-fill,minmax(calc(var(--q) + 6mm),1fr))}.lb{border:1px dashed #999;padding:2mm;text-align:center;break-inside:avoid;font:10px Arial,sans-serif}.lb svg{width:var(--q);height:var(--q);display:block;margin:0 auto}.lb b{display:block;font:bold 11px monospace}.lb span{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}';
+async function showLabels(list,mm,filename){
+  try{await lib('qr')}catch(e){toast('The QR builder couldn\'t load. Connect to the internet once, then try again.');return false}
+  const grid='<div class="lg" style="--q:'+mm+'mm">'+list.map(l=>{const q=qrcode(0,'M');q.addData(l.code);q.make();return '<div class="lb">'+q.createSvgTag(3,6)+'<b>'+esc(l.code)+'</b>'+(l.name?'<span>'+esc(l.name)+'</span>':'')+'</div>'}).join('')+'</div>';
+  if(HOSTED){   // Claude can't print from the page, so hand over a printable file
+    await saveFile(filename,'<!DOCTYPE html><html><head><meta charset="utf-8"><title>Gear tags</title><style>@page{margin:8mm}body{margin:0}'+LABEL_CSS+'</style></head><body>'+grid+'</body></html>');
+    return true;
+  }
+  const pv=$('#printview');
+  pv.innerHTML='<div class="pv-bar"><span>'+list.length+' tags, '+mm+' mm</span><span class="rowbtns"><button class="btn pri" data-a="doPrint">Print</button><button class="btn" data-a="closePrint">Close</button></span></div>'+grid;
+  pv.hidden=false;return true;
 }
 async function importCSV(file){
   const rows=parseCSV(await file.text()); if(rows.length<2)return toast('That file has no rows under the headings.');
