@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#14191a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Gear Register">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<title>Rope Access Gear Register</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a phone-first field tool. One column, bottom tabs, every item a tag-like row with a status stripe on its left edge. */
+:root{
+  --bg:#e7e9e4; --surface:#f8f9f6; --ink:#14191a; --muted:#566260; --line:#cdd2cb;
+  --accent:#ffd21f; --accent-ink:#14191a;
+  --ok:#1c7743; --soon:#b34f00; --bad:#c1241b;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111415; --surface:#1a1f20; --ink:#e8ebe6; --muted:#9ba6a3; --line:#2f3739;
+    --accent:#ffd21f; --accent-ink:#14191a; --ok:#4cc27f; --soon:#f2913f; --bad:#ff6f62;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111415; --surface:#1a1f20; --ink:#e8ebe6; --muted:#9ba6a3; --line:#2f3739;
+  --accent:#ffd21f; --accent-ink:#14191a; --ok:#4cc27f; --soon:#f2913f; --bad:#ff6f62;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:400 15px/1.45 var(--body);-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{font-family:var(--display);text-transform:uppercase;letter-spacing:.03em;margin:0;text-wrap:balance;line-height:1.1}
+h2{font-size:26px} h3{font-size:18px;color:var(--muted)}
+.app{height:100%;display:flex;flex-direction:column;max-width:760px;margin:0 auto}
+header{padding:calc(12px + env(safe-area-inset-top)) 16px 0;background:var(--bg)}
+.brand{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-bottom:8px}
+.brand h1{font-size:28px}
+.brand span{font-size:12px;color:var(--muted);text-align:right}
+.tape{height:6px;background:repeating-linear-gradient(135deg,var(--accent) 0 10px,var(--ink) 10px 20px)}
+main>*{flex:none}
+main{flex:1;overflow-y:auto;padding:16px 16px 24px;display:flex;flex-direction:column;gap:14px}
+nav{padding-bottom:env(safe-area-inset-bottom);display:flex;border-top:1px solid var(--line);background:var(--surface)}
+nav a{flex:1;text-align:center;padding:12px 2px 14px;text-decoration:none;color:var(--muted);font:600 16px var(--display);text-transform:uppercase;letter-spacing:.03em;border-top:4px solid transparent;margin-top:-1px}
+nav a[aria-current="page"]{color:var(--ink);border-top-color:var(--accent)}
+nav a i{font:600 11px var(--body);font-style:normal;background:var(--bad);color:#fff;border-radius:9px;padding:1px 6px;margin-left:3px;vertical-align:2px}
+nav a i.n{background:var(--ink);color:var(--bg)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;box-shadow:0 0 0 1px var(--ink)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:8px 14px;border:1.5px solid var(--ink);border-radius:4px;background:var(--surface);cursor:pointer;font-weight:600;text-align:center}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent-ink)}
+.btn.big{min-height:64px;font:700 22px var(--display);text-transform:uppercase;letter-spacing:.04em;width:100%}
+.btn.quiet{border-color:var(--line);font-weight:500}
+.btn.danger{border-color:var(--bad);color:var(--bad)}
+.btn[disabled]{opacity:.45;cursor:default}
+.rowbtns{display:flex;flex-wrap:wrap;gap:8px}
+.rowbtns .btn{flex:1 1 140px}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.tile{border:1.5px solid var(--line);background:var(--surface);border-radius:4px;padding:8px 6px;text-align:left;cursor:pointer;min-width:0}
+.tile b{display:block;font:700 30px/1 var(--display);font-variant-numeric:tabular-nums}
+.tile span{font-size:11.5px;color:var(--muted);display:block;line-height:1.2;margin-top:3px}
+.tile[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 -4px 0 var(--accent)}
+.tile.bad b{color:var(--bad)} .tile.soon b{color:var(--soon)}
+.tools{display:flex;gap:8px}
+.tools input{flex:1;min-width:0}
+input,select,textarea{min-height:44px;padding:8px 10px;border:1.5px solid var(--line);border-radius:4px;background:var(--surface);width:100%}
+textarea{min-height:90px;resize:vertical}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.chip{white-space:nowrap;border:1.5px solid var(--line);background:transparent;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.group{display:flex;flex-direction:column;gap:6px}
+.group>h3{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px}
+.group>h3 small{font:500 12px var(--body);letter-spacing:0;text-transform:none}
+
+.row{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--ok);border-radius:3px;padding:9px 10px;cursor:pointer}
+.row.s-soon{border-left-color:var(--soon)}
+.row.s-overdue,.row.s-expired,.row.s-quarantined{border-left-color:var(--bad)}
+.row.s-never{border-left-color:var(--ink)}
+.row.s-retired,.row.s-new{border-left-color:var(--line)}
+.row.s-retired{opacity:.65}
+.r-main{display:flex;flex-direction:column;min-width:0;gap:1px}
+.r-main b{font-weight:600;overflow-wrap:anywhere}
+.r-side{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex:none}
+.code{font:500 12.5px var(--mono);overflow-wrap:anywhere}
+.sub{font-size:12px;color:var(--muted)}
+.pill{font-size:11.5px;font-weight:600;border-radius:3px;padding:2px 7px;border:1.5px solid var(--ok);color:var(--ok);white-space:nowrap}
+.p-soon{border-color:var(--soon);color:var(--soon)}
+.p-overdue,.p-expired{background:var(--bad);border-color:var(--bad);color:#fff}
+.p-quarantined{border-color:var(--bad);color:var(--bad);border-style:dashed}
+.p-never{border-color:var(--ink);color:var(--ink)}
+.p-retired,.p-new{border-color:var(--muted);color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.card p{margin:0}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.note{font-size:13px;border-left:4px solid var(--accent);padding:6px 10px;background:var(--surface)}
+.xbtn{border:0;background:none;font-size:22px;line-height:1;padding:6px 8px;cursor:pointer;color:var(--muted)}
+.scanform{display:flex;gap:8px}
+.scanform input{flex:1;min-width:0;font-family:var(--mono)}
+
+#sheet{position:fixed;inset:0;background:rgba(10,14,14,.55);display:flex;align-items:flex-end;justify-content:center;z-index:5}
+#sheet[hidden]{display:none}
+.sheet-card{background:var(--bg);width:100%;max-width:760px;max-height:92%;overflow-y:auto;border-top:6px solid var(--accent);padding:16px 16px 28px;display:flex;flex-direction:column;gap:12px;position:relative}
+.sheet-card form{display:flex;flex-direction:column;gap:10px}
+.sheet-card .x{position:absolute;top:8px;right:8px}
+.fld{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted);font-weight:500}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font-size:14px}
+dt{color:var(--muted)} dd{margin:0;overflow-wrap:anywhere}
+.seg{display:inline-flex;border:1.5px solid var(--ink);border-radius:4px;overflow:hidden;flex:none}
+.seg label{padding:8px 12px;font-weight:600;font-size:13px;cursor:pointer}
+.seg input{position:absolute;opacity:0;width:1px;height:1px;min-height:0}
+.seg label:has(input:checked){background:var(--ok);color:#fff}
+.seg label.f:has(input:checked){background:var(--bad)}
+.seg label:has(input:focus-visible){outline:3px solid var(--accent);outline-offset:-3px}
+.irow{display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding:6px 0}
+.catrow{display:grid;grid-template-columns:1fr 64px 64px;gap:6px}
+.catrow.h{font-size:11.5px;color:var(--muted)}
+#live{position:fixed;inset:0;z-index:8;background:#000;display:flex;flex-direction:column}
+#live[hidden]{display:none}
+#livevid{flex:1;min-height:0;width:100%;object-fit:cover;border:6px solid transparent}
+#live.hit #livevid{border-color:var(--accent)}
+.livebar{background:var(--bg);display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
+.livebar b{font:700 30px/1 var(--display)}
+#toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:4px;font-size:14px;max-width:calc(100% - 32px);z-index:9;text-align:center}
+#toast[hidden]{display:none}
+@media (max-width:400px){.two{grid-template-columns:1fr}.brand span{display:none}}
+@media (prefers-reduced-motion:no-preference){.sheet-card{animation:up .16s ease-out}@keyframes up{from{transform:translateY(24px)}to{transform:none}}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><h1>Gear Register</h1><span id="store">Loading</span></div>
+    <div class="tape" aria-hidden="true"></div>
+  </header>
+  <main id="view" tabindex="-1"></main>
+  <nav aria-label="Sections">
+    <a href="#gear" data-r="gear">Gear</a>
+    <a href="#scan" data-r="scan">Scan<i class="n" id="n-scan" hidden></i></a>
+    <a href="#kits" data-r="kits">Kits</a>
+    <a href="#due" data-r="due">Due<i id="n-due" hidden></i></a>
+    <a href="#reports" data-r="reports">Reports</a>
+  </nav>
+</div>
+<div id="sheet" hidden></div>
+<div id="live" hidden><video id="livevid" playsinline muted></video><div class="livebar"><div><b id="livecount">0</b> in batch<br><span class="sub" id="livelast">Point the camera at a tag</span></div><button class="btn pri" data-a="stopLive">Done</button></div></div>
+<div id="toast" role="status" hidden></div>
+
+<script>
+/*LOGIC-START*/
+const pad=n=>String(n).padStart(2,'0');
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function todayStr(d){d=d||new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function addMonths(s,n){
+  if(!s)return null;
+  const [y,m,d]=s.split('-').map(Number);
+  const t=y*12+(m-1)+n, ny=Math.floor(t/12), nm=t%12;
+  const last=new Date(Date.UTC(ny,nm+1,0)).getUTCDate();
+  return ny+'-'+pad(nm+1)+'-'+pad(Math.min(d,last));
+}
+function daysBetween(a,b){return Math.round((Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/864e5)}
+function fmtDate(s){if(!s)return '';const [y,m,d]=s.split('-');return Number(d)+' '+MON[m-1]+' '+y}
+function parseDate(s){
+  s=String(s||'').trim(); if(!s)return '';
+  let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m)return m[1]+'-'+pad(+m[2])+'-'+pad(+m[3]);
+  m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/); // day first, as written in Australia
+  if(m){const y=m[3].length===2?'20'+m[3]:m[3];return y+'-'+pad(+m[2])+'-'+pad(+m[1])}
+  return '';
+}
+const normCode=s=>String(s==null?'':s).trim().toUpperCase();
+function parseCodes(text){
+  const seen=new Set(),out=[];
+  for(const raw of String(text||'').split(/[\n\r,;\t]+/)){
+    const c=raw.trim(); if(!c)continue;
+    const k=normCode(c); if(seen.has(k))continue; seen.add(k); out.push(c);
+  }
+  return out;
+}
+function findByCode(items,code){
+  const k=normCode(code); if(!k)return null;
+  for(const it of items) if(normCode(it.tag)===k) return it;
+  for(const it of items) if(normCode(it.serial)===k) return it;
+  return null;
+}
+// Latest inspection per item. Pre-use checks are logged but do not reset the periodic due date.
+function latestInspections(sessions){
+  const m=new Map();
+  for(const s of sessions){
+    if(s.type==='preuse')continue;
+    for(const e of (s.entries||[])){
+      const cur=m.get(e.itemId);
+      if(!cur||s.date>cur.date||(s.date===cur.date&&(s.createdAt||0)>(cur.createdAt||0)))
+        m.set(e.itemId,{date:s.date,result:e.result,sid:s.id,createdAt:s.createdAt||0});
+    }
+  }
+  return m;
+}
+const numOr=(v,d)=>(v===null||v===undefined||v===''||isNaN(+v))?d:+v;
+const SEV={overdue:0,expired:1,never:2,quarantined:3,soon:4,ok:5,retired:6};
+function itemState(item,last,cat,today){
+  const interval=numOr(item.intervalMonths,numOr(cat&&cat.interval,6));
+  const life=numOr(item.lifeYears,numOr(cat&&cat.life,0));
+  const retireOn=life>0&&item.mfgDate?addMonths(item.mfgDate,life*12):null;
+  const nextDue=last&&interval>0?addMonths(last.date,interval):null;
+  const base={nextDue,retireOn,last:last||null};
+  if(item.status==='retired')return {...base,key:'retired',label:'Retired'};
+  if(item.status==='quar'||(last&&last.result==='fail'))return {...base,key:'quarantined',label:'Quarantined'};
+  if(retireOn&&retireOn<=today)return {...base,key:'expired',label:'Past service life'};
+  if(!last)return {...base,key:'never',label:'Not inspected'};
+  if(!nextDue)return {...base,key:'ok',label:'In date'};
+  const dd=daysBetween(today,nextDue);
+  if(dd<0)return {...base,key:'overdue',label:'Overdue '+(-dd)+' d'};
+  if(dd<=30)return {...base,key:'soon',label:dd===0?'Due today':'Due in '+dd+' d'};
+  return {...base,key:'ok',label:'In date'};
+}
+function csvCell(v){v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function toCSV(rows){return rows.map(r=>r.map(csvCell).join(',')).join('\r\n')}
+function parseCSV(text){
+  const rows=[];let row=[],cur='',q=false;text=String(text||'').replace(/^﻿/,'');
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++} else q=false } else cur+=c }
+    else if(c==='"')q=true;
+    else if(c===','){row.push(cur);cur=''}
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n')i++; row.push(cur);cur=''; if(row.some(x=>x.trim()!==''))rows.push(row); row=[] }
+    else cur+=c;
+  }
+  row.push(cur); if(row.some(x=>x.trim()!==''))rows.push(row);
+  return rows;
+}
+function nextTag(items,prefix){
+  let max=0;const p=normCode(prefix);
+  for(const it of items){const t=normCode(it.tag);if(t.startsWith(p)){const n=parseInt(t.slice(p.length),10);if(n>max)max=n}}
+  return prefix+String(max+1).padStart(4,'0');
+}
+/*LOGIC-END*/
+
+const CATS_DEFAULT=[
+  {id:'harness',name:'Harnesses',interval:6,life:10},
+  {id:'helmet',name:'Helmets',interval:6,life:10},
+  {id:'rope',name:'Ropes',interval:6,life:10},
+  {id:'lanyard',name:'Lanyards and cow\'s tails',interval:6,life:10},
+  {id:'sling',name:'Slings and anchor straps',interval:6,life:10},
+  {id:'descender',name:'Descenders',interval:6,life:0},
+  {id:'ascender',name:'Ascenders and rope clamps',interval:6,life:0},
+  {id:'backup',name:'Backup devices',interval:6,life:0},
+  {id:'connector',name:'Connectors',interval:6,life:0},
+  {id:'pulley',name:'Pulleys',interval:6,life:0},
+  {id:'rigging',name:'Rigging plates, swivels and shackles',interval:12,life:0},
+  {id:'lifting',name:'Lifting gear',interval:12,life:0},
+  {id:'protect',name:'Rope and edge protection',interval:6,life:0}
+];
+const LIBS={
+  jsqr:'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
+  qr:'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js',
+  pdf:'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+};
+const PATH={items:'items',kits:'kits',insp:'inspections'};
+const S={items:new Map(),kits:new Map(),insp:new Map(),settings:{},batch:[],route:'gear',q:'',fCat:'',fState:'',ready:false,mode:'loading',slow:false};
+let db=null, LAST=new Map();
+const HOSTED=!!(window.claude&&window.claude.use);            // inside Claude: no live camera, account storage
+const LIVE=!HOSTED&&!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const newId=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const use=n=>(window.claude&&window.claude.use)?window.claude.use(n).catch(()=>null):Promise.resolve(null);
+const cats=()=>(S.settings.cats&&S.settings.cats.length)?S.settings.cats:CATS_DEFAULT;
+const catById=id=>cats().find(c=>c.id===id);
+const all=k=>[...S[k]].map(([id,d])=>({...d,id}));
+const stateOf=it=>itemState(it,LAST.get(it.id),catById(it.cat),todayStr());
+const needs=k=>k==='overdue'||k==='expired'||k==='never';
+
+/* ---------- saving ---------- */
+function saveLocal(){
+  try{localStorage.setItem('gearreg.v1',JSON.stringify({items:[...S.items],kits:[...S.kits],insp:[...S.insp],settings:S.settings}))}catch(e){}
+}
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+async function writeRetry(fn){
+  for(let i=0;;i++){
+    try{return await fn()}
+    catch(e){
+      const c=e&&e.code;
+      if(i<3&&(c==='unavailable'||c==='resource_exhausted')){await wait(c==='unavailable'?600:2200);continue}
+      throw e;
+    }
+  }
+}
+async function put(k,id,data,quiet){
+  const d={...data};delete d.id;
+  S[k].set(id,d); if(!quiet)refresh();
+  if(db)await writeRetry(()=>db.doc(PATH[k]+'/'+id).set(d)); else saveLocal();
+}
+async function del(k,id){
+  S[k].delete(id);refresh();
+  if(db)await writeRetry(()=>db.doc(PATH[k]+'/'+id).delete()); else saveLocal();
+}
+async function putSettings(s){
+  S.settings=s;refresh();
+  if(db)await writeRetry(()=>db.doc('meta/settings').set(s)); else saveLocal();
+}
+function failMsg(e){
+  if(e&&e.code==='quota_exceeded')return 'Storage is full. Delete old records, then try again.';
+  if(e&&e.code==='invalid_argument')return 'This view can\'t save changes. Open the register as its owner.';
+  return 'Couldn\'t save. Check your connection and try again.';
+}
+async function safe(fn,okMsg){
+  try{await fn(); if(okMsg)toast(okMsg); return true}
+  catch(e){toast(failMsg(e));return false}
+}
+async function bulk(jobs,doneMsg){
+  let n=0,bad=0,err=null;
+  for(const j of jobs){
+    toast('Saving '+(++n)+' of '+jobs.length,true);
+    try{await j()}catch(e){bad++;err=e; if(e&&(e.code==='quota_exceeded'||e.code==='invalid_argument'))break}
+  }
+  refresh();
+  toast(bad?failMsg(err)+' '+bad+' not saved.':doneMsg);
+  return !bad;
+}
+
+/* ---------- small UI parts ---------- */
+let toastT;
+function toast(msg,sticky){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toastT);if(!sticky)toastT=setTimeout(()=>t.hidden=true,3200)}
+function sheet(html){
+  const el=$('#sheet');
+  el.innerHTML='<div class="sheet-card" role="dialog" aria-modal="true" tabindex="-1"><button class="xbtn x" data-a="close" aria-label="Close">&times;</button>'+html+'</div>';
+  el.hidden=false; el.firstChild.focus();
+}
+function closeSheet(){const el=$('#sheet');el.hidden=true;el.innerHTML=''}
+const fld=(label,name,val,attr)=>'<label class="fld" for="f-'+name+'">'+label+'<input id="f-'+name+'" name="'+name+'" value="'+esc(val)+'" '+(attr||'')+'></label>';
+const sel=(label,name,opts,val)=>'<label class="fld" for="f-'+name+'">'+label+'<select id="f-'+name+'" name="'+name+'">'+opts.map(o=>'<option value="'+esc(o[0])+'"'+(o[0]===(val||'')?' selected':'')+'>'+esc(o[1])+'</option>').join('')+'</select></label>';
+const catOpts=()=>cats().map(c=>[c.id,c.name]);
+const kitOpts=()=>[['','No kit']].concat(all('kits').sort((a,b)=>a.name.localeCompare(b.name)).map(k=>[k.id,k.name]));
+function row(it){
+  const st=stateOf(it),kit=S.kits.get(it.kit);
+  return '<button class="row s-'+st.key+'" data-a="open" data-id="'+it.id+'"><span class="r-main"><b>'+esc(it.name)+'</b><span class="code">'+esc(it.tag||it.serial||'No tag')+'</span>'+(kit?'<span class="sub">'+esc(kit.name)+'</span>':'')+'</span><span class="r-side"><span class="pill p-'+st.key+'">'+st.label+'</span><span class="sub">'+(st.key==='retired'?'':st.nextDue?'Due '+fmtDate(st.nextDue):'')+'</span></span></button>';
+}
+
+/* ---------- views ---------- */
+const M={},R={};
+M.gear=()=>{
+  $('#view').innerHTML='<section class="summary" id="sum" aria-label="Summary"></section><div class="tools"><label class="vh" for="q">Search gear</label><input id="q" type="search" placeholder="Search name, tag or serial" value="'+esc(S.q)+'"><button class="btn pri" data-a="addItem">Add gear</button></div><div class="chips" id="chips"></div><div id="list" class="group"></div>';
+  $('#q').addEventListener('input',e=>{S.q=e.target.value;R.gear()});
+};
+R.gear=()=>{
+  if(!S.ready){$('#list').innerHTML='<p class="hint">'+(S.slow?'Your saved gear can\'t be reached yet. Still trying.':'Loading your gear.')+'</p>';return}
+  const items=all('items'),live=items.filter(i=>i.status!=='retired');
+  const st=new Map(items.map(i=>[i.id,stateOf(i)]));
+  const cnt=f=>live.filter(i=>f(st.get(i.id).key)).length;
+  const tile=(key,n,label,cls)=>'<button class="tile '+(n?cls:'')+'" data-a="fState" data-v="'+key+'" aria-pressed="'+(S.fState===key)+'"><b>'+n+'</b><span>'+label+'</span></button>';
+  $('#sum').innerHTML=tile('',live.length,'Items in the register','')+tile('needs',cnt(needs),'Need inspection','bad')+tile('soon',cnt(k=>k==='soon'),'Due within 30 days','soon')+tile('quarantined',cnt(k=>k==='quarantined'),'Quarantined','bad');
+  const used=cats().filter(c=>live.some(i=>i.cat===c.id));
+  const chip=(v,t)=>'<button class="chip" data-a="fCat" data-v="'+esc(v)+'" aria-pressed="'+(S.fCat===v)+'">'+esc(t)+'</button>';
+  $('#chips').innerHTML=items.length?chip('','All')+used.map(c=>chip(c.id,c.name)).join('')+(items.length>live.length?chip('~retired','Retired'):''):'';
+  if(!items.length){
+    $('#list').innerHTML='<div class="card"><h2>Start your register</h2><p>Tag each piece of gear with a QR sticker or use the serial the maker stamped on it. Then scan a pile of gear in one go and add it all at once.</p><div class="rowbtns"><a class="btn pri" href="#scan">Scan gear</a><button class="btn" data-a="addItem">Add one item</button><button class="btn quiet" data-a="examples">Load 8 example items</button></div><p class="hint">Already have a spreadsheet? Import it as CSV under Reports.</p></div>';
+    return;
+  }
+  const q=S.q.trim().toLowerCase();
+  let shown=(S.fCat==='~retired'?items.filter(i=>i.status==='retired'):live).filter(i=>{
+    const k=st.get(i.id).key;
+    if(S.fCat&&S.fCat!=='~retired'&&i.cat!==S.fCat)return false;
+    if(S.fState==='needs'&&!needs(k))return false;
+    if(S.fState&&S.fState!=='needs'&&k!==S.fState)return false;
+    if(q&&![i.name,i.tag,i.serial,i.maker,i.model].some(v=>String(v||'').toLowerCase().includes(q)))return false;
+    return true;
+  });
+  if(!shown.length){$('#list').innerHTML='<p class="hint">No gear matches. Clear the search or filters.</p>';return}
+  const groups=cats().map(c=>[c.name,shown.filter(i=>i.cat===c.id)]);
+  groups.push(['Uncategorised',shown.filter(i=>!catById(i.cat))]);
+  $('#list').innerHTML=groups.filter(g=>g[1].length).map(g=>'<h3>'+esc(g[0])+'<small>'+g[1].length+'</small></h3>'+g[1].sort((a,b)=>SEV[st.get(a.id).key]-SEV[st.get(b.id).key]||a.name.localeCompare(b.name)).map(row).join('')).join('');
+};
+
+M.scan=()=>{
+  $('#view').innerHTML='<h2>Mass scan</h2>'+(LIVE?'<button class="btn pri big" data-a="startLive">Scan live</button>':'')+'<label class="btn '+(LIVE?'':'pri ')+'big" for="cam">Photograph tags<input class="vh" id="cam" type="file" accept="image/*" capture="environment"></label><div class="rowbtns"><label class="btn" for="pics">Choose photos<input class="vh" id="pics" type="file" accept="image/*" multiple></label><button class="btn" data-a="paste">Paste a list</button></div><form class="scanform" data-form="code"><label class="vh" for="code">Tag code or serial</label><input id="code" name="code" placeholder="Type or scan a code" autocomplete="off" autocapitalize="characters" enterkeyhint="done"><button class="btn">Add</button></form><p class="hint" id="scanmsg">'+(LIVE?'Scan live reads tags one after another as you sweep the camera over them. Or photograph a group of tags':'Lay the gear out, photograph the QR tags')+', and every code in the photo joins the batch. A Bluetooth barcode or RFID reader types straight into the box above.</p><div id="batch" class="group"></div>';
+  const onPick=e=>{const f=[...e.target.files];e.target.value='';readPhotos(f)};
+  $('#cam').addEventListener('change',onPick);$('#pics').addEventListener('change',onPick);
+};
+function batchInfo(){
+  const items=all('items'),seen=new Set(),known=[],fresh=[];
+  for(const c of S.batch){const it=findByCode(items,c); if(it){if(!seen.has(it.id)){seen.add(it.id);known.push(it)}} else fresh.push(c)}
+  return {items,known,fresh};
+}
+R.scan=()=>{
+  const el=$('#batch'); if(!S.batch.length){el.innerHTML='';return}
+  const b=batchInfo(),items=b.items;
+  el.innerHTML='<h3>Batch<small>'+S.batch.length+' scanned, '+b.known.length+' known, '+b.fresh.length+' new</small></h3>'+
+  '<div class="rowbtns">'+(b.fresh.length?'<button class="btn pri" data-a="bulkAdd">Add '+b.fresh.length+' new</button>':'')+(b.known.length?'<button class="btn'+(b.fresh.length?'':' pri')+'" data-a="bulkInspect">Inspect '+b.known.length+'</button><button class="btn" data-a="bulkEdit">Move or update</button>':'')+'<button class="btn quiet" data-a="clearBatch">Clear</button></div>'+
+  S.batch.map((c,i)=>{
+    const it=findByCode(items,c),st=it?stateOf(it):{key:'new',label:'New'};
+    return '<div class="row s-'+st.key+'"><span class="r-main"><b>'+esc(it?it.name:'Not in the register')+'</b><span class="code">'+esc(c)+'</span></span><span class="r-side" style="flex-direction:row;align-items:center"><span class="pill p-'+st.key+'">'+st.label+'</span><button class="xbtn" data-a="dropCode" data-i="'+i+'" aria-label="Remove '+esc(c)+'">&times;</button></span></div>';
+  }).join('');
+};
+
+M.kits=()=>{$('#view').innerHTML='<div class="tools"><h2 style="flex:1">Kits</h2><button class="btn pri" data-a="editKit">New kit</button></div><div id="kits" class="group"></div>'};
+R.kits=()=>{
+  const kits=all('kits').sort((a,b)=>a.name.localeCompare(b.name)),items=all('items');
+  $('#kits').innerHTML=kits.length?kits.map(k=>{
+    const mine=items.filter(i=>i.kit===k.id&&i.status!=='retired'),bad=mine.filter(i=>{const s=stateOf(i).key;return needs(s)||s==='quarantined'}).length;
+    return '<button class="row s-'+(bad?'overdue':'ok')+'" data-a="openKit" data-id="'+k.id+'"><span class="r-main"><b>'+esc(k.name)+'</b><span class="sub">'+esc(k.assignee||'Unassigned')+'</span></span><span class="r-side"><span class="pill p-'+(bad?'overdue':'ok')+'">'+(bad?bad+' need attention':'All in date')+'</span><span class="sub">'+mine.length+' items</span></span></button>';
+  }).join(''):'<div class="card"><p>A kit is a bag or set of gear that travels together, such as a personal rope access kit or a rescue bag. Assign it to a technician or a job, then scan the bag to check nothing is missing.</p></div>';
+};
+
+M.due=()=>{$('#view').innerHTML='<h2>Inspections and service life</h2><div id="due" class="group"></div>'};
+R.due=()=>{
+  const t=todayStr(),live=all('items').filter(i=>i.status!=='retired').map(i=>[i,stateOf(i)]);
+  const sec=(title,list,emptyMsg)=>'<h3>'+title+'<small>'+list.length+'</small></h3>'+(list.length?list.map(x=>row(x[0])).join(''):'<p class="hint">'+emptyMsg+'</p>');
+  const byDue=(a,b)=>String(a[1].nextDue||'').localeCompare(String(b[1].nextDue||''));
+  const now=live.filter(x=>needs(x[1].key)).sort(byDue),soon=live.filter(x=>x[1].key==='soon').sort(byDue);
+  const later=live.filter(x=>x[1].key==='ok'&&x[1].nextDue).sort(byDue).slice(0,10);
+  const life=live.filter(x=>x[1].retireOn&&daysBetween(t,x[1].retireOn)<=365).sort((a,b)=>a[1].retireOn.localeCompare(b[1].retireOn));
+  $('#due').innerHTML=(now.length?'<button class="btn pri" data-a="inspectDue">Inspect all '+now.length+' now</button>':'')+sec('Inspect now',now,'Nothing is overdue.')+sec('Due within 30 days',soon,'Nothing due this month.')+sec('Coming up next',later,'No later inspections scheduled yet.')+
+  '<h3>Service life ends within 12 months<small>'+life.length+'</small></h3>'+(life.length?life.map(x=>'<button class="row s-'+(x[1].retireOn<=t?'expired':'soon')+'" data-a="open" data-id="'+x[0].id+'"><span class="r-main"><b>'+esc(x[0].name)+'</b><span class="code">'+esc(x[0].tag||x[0].serial||'No tag')+'</span></span><span class="r-side"><span class="sub">Retire by</span><span>'+fmtDate(x[1].retireOn)+'</span></span></button>').join(''):'<p class="hint">No gear reaches the end of its service life in the next year.</p>');
+};
+
+M.reports=()=>{
+  const s=S.settings;
+  $('#view').innerHTML='<h2>Reports</h2><div class="card"><div class="rowbtns"><button class="btn pri" data-a="pdfRegister">Inspection register PDF</button><button class="btn" data-a="csvRegister">Gear list CSV</button><button class="btn" data-a="csvInsp">Inspection history CSV</button><button class="btn" data-a="labels">QR label sheet</button></div><p class="hint">The label sheet makes a QR code for every tagged item. Print it on sticker paper or laminate the tags.</p></div>'+
+  '<h3>Inspection records</h3><div id="sessions" class="group"></div>'+
+  '<h3>Import</h3><div class="card"><label class="btn" for="csvin">Import gear from CSV<input class="vh" id="csvin" type="file" accept=".csv,text/csv"></label><p class="hint">First row must be headings. Recognised columns: name, category, tag, serial, manufacturer, model, manufactured, first use, kit. Dates as 2026-03-14 or 14/03/2026.</p></div>'+
+  '<h3>Settings</h3><form class="card" data-form="settings">'+fld('Company or trading name','company',s.company||'')+fld('Inspector name','inspector',s.inspector||'')+fld('Prefix for new tag numbers','tagPrefix',s.tagPrefix||'GEAR-')+
+  '<div class="catrow h"><span>Category</span><span>Inspect every (months)</span><span>Service life (years)</span></div><div id="catrows" class="group">'+cats().map(catRow).join('')+'</div><button type="button" class="btn quiet" data-a="addCat">Add category</button><p class="hint">Service life 0 means no fixed limit. Clear a name to remove that category. These are starting values. Set them to match the maker\'s instructions and the standard you work to.</p><button class="btn pri">Save settings</button></form>'+
+  '<div class="card"><p class="hint" id="storenote"></p><div class="rowbtns"><button class="btn" data-a="backup">Back up everything</button><label class="btn" for="restore">Restore a backup<input class="vh" id="restore" type="file" accept=".json,application/json"></label></div><div class="rowbtns"><button class="btn quiet" data-a="examples">Load example gear</button><button class="btn quiet" data-a="rmExamples">Remove example gear</button></div></div>';
+  $('#csvin').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)importCSV(f)});
+  $('#restore').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)restore(f)});
+};
+const catRow=(c,i)=>'<div class="catrow" data-id="'+esc(c.id)+'"><input aria-label="Category name" id="cn-'+esc(c.id)+'" data-k="name" value="'+esc(c.name)+'"><input aria-label="Inspection interval in months" id="ci-'+esc(c.id)+'" data-k="interval" type="number" min="0" max="60" inputmode="numeric" value="'+esc(c.interval)+'"><input aria-label="Service life in years" id="cl-'+esc(c.id)+'" data-k="life" type="number" min="0" max="50" inputmode="numeric" value="'+esc(c.life)+'"></div>';
+R.reports=()=>{
+  const ss=all('insp').sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0)).slice(0,20);
+  $('#sessions').innerHTML=ss.length?ss.map(s=>{const f=s.entries.filter(e=>e.result==='fail').length;return '<div class="row s-'+(f?'overdue':'ok')+'"><span class="r-main"><b>'+fmtDate(s.date)+' · '+TYPES[s.type||'periodic']+'</b><span class="sub">'+esc(s.inspector||'')+' · '+s.entries.length+' items'+(f?', '+f+' failed':'')+'</span></span><span class="r-side"><button class="btn quiet" data-a="pdfSession" data-id="'+s.id+'">PDF</button></span></div>'}).join(''):'<p class="hint">Inspections you record appear here, each with its own PDF record.</p>';
+  $('#storenote').textContent=S.mode==='cloud'?'Your register is saved to your Claude account and opens on any device you sign in on.':'Your register is saved on this device only. Use Back up everything regularly and keep the file somewhere safe.';
+};
+
+function mount(){
+  document.querySelectorAll('nav a').forEach(a=>a.dataset.r===S.route?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'));
+  M[S.route]();refresh();
+}
+function refresh(){
+  LAST=latestInspections(all('insp'));
+  R[S.route]();
+  const nd=all('items').filter(i=>i.status!=='retired'&&needs(stateOf(i).key)).length;
+  $('#n-due').hidden=!nd;$('#n-due').textContent=nd;
+  $('#n-scan').hidden=!S.batch.length;$('#n-scan').textContent=S.batch.length;
+  $('#store').textContent=S.mode==='cloud'?'Saved to your account':S.mode==='local'?'Saved on this device':'Loading';
+}
+function route(){
+  const r=location.hash.slice(1);
+  S.route=M[r]?r:'gear';mount();
+}
+
+/* ---------- item sheets ---------- */
+const TYPES={periodic:'Periodic inspection',preuse:'Pre-use check',incident:'After incident or fall'};
+function openItem(id){
+  const d=S.items.get(id); if(!d)return closeSheet();
+  const it={...d,id},st=stateOf(it),c=catById(it.cat),kit=S.kits.get(it.kit);
+  const hist=all('insp').filter(s=>s.entries.some(e=>e.itemId===id)).sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
+  const dd=(k,v)=>v?'<dt>'+k+'</dt><dd>'+v+'</dd>':'';
+  sheet('<div><span class="pill p-'+st.key+'">'+st.label+'</span></div><h2>'+esc(it.name)+'</h2>'+
+  '<dl>'+dd('Tag',it.tag&&'<span class="code">'+esc(it.tag)+'</span>')+dd('Serial',it.serial&&'<span class="code">'+esc(it.serial)+'</span>')+dd('Category',esc(c?c.name:'Uncategorised'))+dd('Make',esc([it.maker,it.model].filter(Boolean).join(' ')))+dd('Kit',kit&&esc(kit.name))+dd('Manufactured',fmtDate(it.mfgDate))+dd('First used',fmtDate(it.firstUse))+dd('Last inspected',st.last&&fmtDate(st.last.date)+' ('+(st.last.result==='fail'?'failed':'passed')+')')+dd('Next due',fmtDate(st.nextDue))+dd('Retire by',fmtDate(st.retireOn))+dd('Notes',esc(it.notes))+'</dl>'+
+  '<div class="rowbtns">'+(it.status!=='retired'?'<button class="btn pri" data-a="inspectOne" data-id="'+id+'">Record inspection</button>':'')+'<button class="btn" data-a="editItem" data-id="'+id+'">Edit</button>'+
+  (st.key==='quarantined'?'<button class="btn" data-a="setStatus" data-id="'+id+'" data-v="in">Return to service</button>':it.status==='retired'?'<button class="btn" data-a="setStatus" data-id="'+id+'" data-v="in">Bring back into service</button>':'<button class="btn" data-a="setStatus" data-id="'+id+'" data-v="quar">Quarantine</button>')+
+  (it.status!=='retired'?'<button class="btn danger" data-a="setStatus" data-id="'+id+'" data-v="retired">Retire</button>':'<button class="btn danger" data-a="askDelete" data-id="'+id+'">Delete record</button>')+'</div>'+
+  (st.key==='quarantined'&&it.status!=='quar'?'<p class="note">This item failed its last inspection. Record a passing inspection to clear it.</p>':'')+
+  '<h3>Inspection history</h3>'+(hist.length?hist.map(s=>{const e=s.entries.find(e=>e.itemId===id);return '<div class="irow"><span>'+fmtDate(s.date)+'<br><span class="sub">'+TYPES[s.type||'periodic']+' · '+esc(s.inspector||'')+(s.notes?' · '+esc(s.notes):'')+'</span></span><span class="pill p-'+(e.result==='fail'?'overdue':'ok')+'">'+(e.result==='fail'?'Fail':'Pass')+'</span></div>'}).join(''):'<p class="hint">No inspections recorded yet.</p>'));
+}
+function itemForm(id){
+  const it=id?S.items.get(id):{cat:cats()[0].id,tag:nextTag(all('items'),S.settings.tagPrefix||'GEAR-')};
+  const c=catById(it.cat)||cats()[0];
+  sheet('<h2>'+(id?'Edit gear':'Add gear')+'</h2><form data-form="item" data-id="'+(id||'')+'">'+fld('Name','name',it.name||'','required placeholder="e.g. Petzl I\'D S descender"')+sel('Category','cat',catOpts(),it.cat)+
+  '<div class="two">'+fld('Tag code','tag',it.tag||'','autocapitalize="characters"')+fld('Maker\'s serial number','serial',it.serial||'')+'</div><div class="two">'+fld('Manufacturer','maker',it.maker||'')+fld('Model','model',it.model||'')+'</div><div class="two">'+fld('Date of manufacture','mfgDate',it.mfgDate||'','type="date"')+fld('Date of first use','firstUse',it.firstUse||'','type="date"')+'</div><div class="two">'+fld('Inspect every (months)','intervalMonths',it.intervalMonths==null?'':it.intervalMonths,'type="number" min="0" max="60" inputmode="numeric" placeholder="Category default: '+c.interval+'"')+fld('Service life (years)','lifeYears',it.lifeYears==null?'':it.lifeYears,'type="number" min="0" max="50" inputmode="numeric" placeholder="Category default: '+(c.life||'none')+'"')+'</div>'+sel('Kit','kit',kitOpts(),it.kit)+
+  '<label class="fld" for="f-notes">Notes<textarea id="f-notes" name="notes">'+esc(it.notes||'')+'</textarea></label><button class="btn pri">'+(id?'Save changes':'Add to register')+'</button></form>');
+}
+function inspectSheet(ids){
+  const its=ids.map(id=>({...S.items.get(id),id})).filter(i=>i.name);
+  if(!its.length)return toast('No gear to inspect.');
+  sheet('<h2>Record inspection</h2><form data-form="inspect" data-ids="'+its.map(i=>i.id).join(',')+'"><div class="two">'+fld('Date','date',todayStr(),'type="date" required max="'+todayStr()+'"')+sel('Type','type',Object.entries(TYPES),'periodic')+'</div>'+fld('Inspected by','inspector',S.settings.inspector||'','required')+
+  '<div>'+its.map(i=>'<div class="irow"><span><b>'+esc(i.name)+'</b><br><span class="code">'+esc(i.tag||i.serial||'')+'</span></span><span class="seg" role="group" aria-label="Result for '+esc(i.name)+'"><label><input type="radio" id="p-'+i.id+'" name="r_'+i.id+'" value="pass" checked><span>Pass</span></label><label class="f"><input type="radio" id="x-'+i.id+'" name="r_'+i.id+'" value="fail"><span>Fail</span></label></span></div>').join('')+'</div>'+
+  '<label class="fld" for="f-notes">Notes and defects found<textarea id="f-notes" name="notes"></textarea></label><p class="hint">Failed items are quarantined straight away.</p><button class="btn pri">Save inspection of '+its.length+(its.length===1?' item':' items')+'</button></form>');
+}
+function openKit(id){
+  const k=S.kits.get(id); if(!k)return closeSheet();
+  const mine=all('items').filter(i=>i.kit===id&&i.status!=='retired');
+  let cmp='';
+  if(S.batch.length){
+    const b=batchInfo(),got=new Set(b.known.map(i=>i.id)),missing=mine.filter(i=>!got.has(i.id)),extra=b.known.filter(i=>i.kit!==id);
+    cmp='<h3>Checked against your scan batch</h3><p class="note">'+(mine.length-missing.length)+' of '+mine.length+' present. '+(missing.length?missing.length+' missing.':'Nothing missing.')+(extra.length||b.fresh.length?' '+(extra.length+b.fresh.length)+' scanned that do not belong to this kit.':'')+'</p>'+(missing.length?'<h3>Missing</h3>'+missing.map(row).join(''):'');
+  }
+  sheet('<h2>'+esc(k.name)+'</h2><p class="hint">'+esc(k.assignee?'Assigned to '+k.assignee:'Unassigned')+(k.notes?' · '+esc(k.notes):'')+'</p><div class="rowbtns"><button class="btn pri" data-a="inspectKit" data-id="'+id+'"'+(mine.length?'':' disabled')+'>Inspect kit</button><button class="btn" data-a="editKit" data-id="'+id+'">Edit</button><button class="btn danger" data-a="askDeleteKit" data-id="'+id+'">Delete kit</button></div>'+cmp+'<h3>Contents<small> '+mine.length+'</small></h3><div class="group">'+(mine.length?mine.map(row).join(''):'<p class="hint">Empty. Scan gear, then choose Move or update to put it in this kit.</p>')+'</div>'+(S.batch.length?'':'<p class="hint">To check the bag, scan its contents on the Scan tab and open this kit again.</p>'));
+}
+
+/* ---------- actions ---------- */
+const A={
+  close:closeSheet,
+  open:d=>openItem(d.id),
+  addItem:()=>itemForm(),
+  editItem:d=>itemForm(d.id),
+  inspectOne:d=>inspectSheet([d.id]),
+  fState:d=>{S.fState=S.fState===d.v?'':d.v;R.gear()},
+  fCat:d=>{S.fCat=d.v;R.gear()},
+  setStatus:async d=>{const it=S.items.get(d.id);if(await safe(()=>put('items',d.id,{...it,status:d.v,updatedAt:Date.now()})))openItem(d.id)},
+  askDelete:d=>{const it=S.items.get(d.id);sheet('<h2>Delete this record?</h2><p>'+esc(it.name)+' leaves the register for good. Its past inspection records stay in the history exports.</p><div class="rowbtns"><button class="btn danger" data-a="doDelete" data-id="'+d.id+'">Delete record</button><button class="btn" data-a="close">Keep it</button></div>')},
+  doDelete:async d=>{closeSheet();await safe(()=>del('items',d.id),'Record deleted.')},
+  paste:()=>sheet('<h2>Paste a list of codes</h2><form data-form="paste"><label class="fld" for="f-codes">One code per line, or separated by commas<textarea id="f-codes" name="codes" style="font-family:var(--mono)" required></textarea></label><button class="btn pri">Add to batch</button></form>'),
+  dropCode:d=>{S.batch.splice(+d.i,1);refresh()},
+  clearBatch:()=>{S.batch=[];refresh()},
+  bulkAdd:()=>{const b=batchInfo();sheet('<h2>Add '+b.fresh.length+' new items</h2><p class="hint">Each scanned code becomes its own record with these shared details. Edit any of them afterwards.</p><form data-form="bulkAdd">'+fld('Name','name','','required placeholder="e.g. DMM steel karabiner"')+sel('Category','cat',catOpts(),cats()[0].id)+'<div class="two">'+fld('Manufacturer','maker','')+fld('Model','model','')+'</div><div class="two">'+fld('Date of manufacture','mfgDate','','type="date"')+fld('Date of first use','firstUse','','type="date"')+'</div>'+sel('Kit','kit',kitOpts(),'')+sel('The scanned code is','codeIs',[['tag','A tag I attached'],['serial','The maker\'s serial number']],'tag')+'<button class="btn pri">Add '+b.fresh.length+' to register</button></form>')},
+  bulkInspect:()=>inspectSheet(batchInfo().known.filter(i=>i.status!=='retired').map(i=>i.id)),
+  inspectDue:()=>inspectSheet(all('items').filter(i=>i.status!=='retired'&&needs(stateOf(i).key)).map(i=>i.id)),
+  inspectKit:d=>inspectSheet(all('items').filter(i=>i.kit===d.id&&i.status!=='retired').map(i=>i.id)),
+  bulkEdit:()=>{const n=batchInfo().known.length;sheet('<h2>Update '+n+' items</h2><form data-form="bulkEdit">'+sel('Kit','kit',[['~','Leave as is']].concat(kitOpts()),'~')+fld('Or put them in a new kit called','newKit','')+sel('Category','cat',[['~','Leave as is']].concat(catOpts()),'~')+sel('Status','status',[['~','Leave as is'],['in','In service'],['quar','Quarantined'],['retired','Retired']],'~')+'<button class="btn pri">Update '+n+' items</button></form>')},
+  openKit:d=>openKit(d.id),
+  editKit:d=>{const k=d.id?S.kits.get(d.id):{};sheet('<h2>'+(d.id?'Edit kit':'New kit')+'</h2><form data-form="kit" data-id="'+(d.id||'')+'">'+fld('Kit name','name',k.name||'','required placeholder="e.g. Rope access kit 1"')+fld('Assigned to (technician or job)','assignee',k.assignee||'')+fld('Notes','notes',k.notes||'')+'<button class="btn pri">Save kit</button></form>')},
+  askDeleteKit:d=>sheet('<h2>Delete this kit?</h2><p>The gear inside stays in the register with no kit.</p><div class="rowbtns"><button class="btn danger" data-a="doDeleteKit" data-id="'+d.id+'">Delete kit</button><button class="btn" data-a="close">Keep it</button></div>'),
+  doDeleteKit:async d=>{closeSheet();await safe(()=>del('kits',d.id),'Kit deleted.')},
+  addCat:()=>{$('#catrows').insertAdjacentHTML('beforeend',catRow({id:newId('c'),name:'',interval:6,life:0}));$('#catrows').lastChild.firstChild.focus()},
+  examples:loadExamples,
+  rmExamples:async()=>{const ex=all('items').filter(i=>i.example);if(!ex.length)return toast('There is no example gear to remove.');const jobs=ex.map(i=>()=>del('items',i.id));all('insp').filter(s=>s.example).forEach(s=>jobs.push(()=>del('insp',s.id)));all('kits').filter(k=>k.example).forEach(k=>jobs.push(()=>del('kits',k.id)));await bulk(jobs,'Example gear removed.')},
+  csvRegister:()=>saveFile('gear-register-'+todayStr()+'.csv',toCSV(registerRows(true))),
+  csvInsp:()=>{const rows=[['Date','Type','Inspector','Tag','Item','Serial','Result','Notes']];all('insp').sort((a,b)=>a.date.localeCompare(b.date)).forEach(s=>s.entries.forEach(e=>{const it=S.items.get(e.itemId)||{};rows.push([s.date,TYPES[s.type||'periodic'],s.inspector,e.tag||it.tag,e.name||it.name,it.serial,e.result==='fail'?'Fail':'Pass',s.notes])}));if(rows.length<2)return toast('No inspections recorded yet.');saveFile('inspection-history-'+todayStr()+'.csv',toCSV(rows))},
+  pdfRegister:async()=>{const r=registerRows(false);if(r.length<2)return toast('Add some gear first.');await pdf('Gear inspection register','gear-inspection-register-'+todayStr()+'.pdf','As at '+fmtDate(todayStr()),r)},
+  pdfSession:async d=>{const s=S.insp.get(d.id);const rows=[['Tag','Item','Category','Serial','Result']];s.entries.forEach(e=>{const it=S.items.get(e.itemId)||{},c=catById(it.cat);rows.push([e.tag||it.tag||'',e.name||it.name||'',c?c.name:'',it.serial||'',e.result==='fail'?'FAIL':'Pass'])});await pdf(TYPES[s.type||'periodic']+' record','inspection-'+s.date+'.pdf','Inspected '+fmtDate(s.date)+' by '+(s.inspector||'')+(s.notes?'.  Notes: '+s.notes:''),rows,s.inspector)},
+  labels:makeLabels,
+  startLive:startLive,
+  stopLive:stopLive,
+  backup:()=>saveFile('gear-register-backup-'+todayStr()+'.json',JSON.stringify({app:'gear-register',v:1,items:[...S.items],kits:[...S.kits],insp:[...S.insp],settings:S.settings})),
+  copyOut:async(d,b)=>{try{await navigator.clipboard.writeText($('#out').value);b.textContent='Copied'}catch(e){$('#out').select();toast('Select all and copy.')}}
+};
+const F={
+  code:(d,f)=>{addCodes(parseCodes(d.code));f.reset();$('#code').focus()},
+  paste:d=>{closeSheet();addCodes(parseCodes(d.codes))},
+  item:async(d,f)=>{
+    const id=f.dataset.id||newId('i'),old=S.items.get(id)||{status:'in',createdAt:Date.now()},tag=d.tag.trim();
+    if(tag&&all('items').some(i=>i.id!==id&&normCode(i.tag)===normCode(tag)))return toast('Another item already uses tag '+tag+'.');
+    const n=v=>v===''?null:+v;
+    const it={...old,name:d.name.trim(),cat:d.cat,tag,serial:d.serial.trim(),maker:d.maker.trim(),model:d.model.trim(),mfgDate:d.mfgDate,firstUse:d.firstUse,intervalMonths:n(d.intervalMonths),lifeYears:n(d.lifeYears),kit:d.kit,notes:d.notes.trim(),updatedAt:Date.now()};
+    if(await safe(()=>put('items',id,it)))openItem(id);
+  },
+  bulkAdd:async d=>{
+    const b=batchInfo();closeSheet();
+    const jobs=b.fresh.map(c=>()=>put('items',newId('i'),{name:d.name.trim(),cat:d.cat,tag:d.codeIs==='tag'?c:'',serial:d.codeIs==='serial'?c:'',maker:d.maker.trim(),model:d.model.trim(),mfgDate:d.mfgDate,firstUse:d.firstUse,kit:d.kit,notes:'',status:'in',createdAt:Date.now(),updatedAt:Date.now()},true));
+    await bulk(jobs,b.fresh.length+' items added. Inspect them next.');
+  },
+  bulkEdit:async d=>{
+    const b=batchInfo();closeSheet();let kit=d.kit;const jobs=[];
+    if(d.newKit.trim()){kit=newId('k');jobs.push(()=>put('kits',kit,{name:d.newKit.trim(),assignee:'',notes:''},true))}
+    if(kit==='~'&&d.cat==='~'&&d.status==='~')return toast('Nothing to change.');
+    b.known.forEach(i=>jobs.push(()=>put('items',i.id,{...i,kit:kit==='~'?i.kit:kit,cat:d.cat==='~'?i.cat:d.cat,status:d.status==='~'?i.status:d.status,updatedAt:Date.now()},true)));
+    await bulk(jobs,b.known.length+' items updated.');
+  },
+  inspect:async(d,f)=>{
+    const ids=f.dataset.ids.split(','),sid=newId('s');
+    const entries=ids.map(id=>{const it=S.items.get(id)||{};return {itemId:id,result:d['r_'+id]==='fail'?'fail':'pass',tag:it.tag||it.serial||'',name:it.name||''}});
+    const fails=entries.filter(e=>e.result==='fail');closeSheet();
+    const jobs=[()=>put('insp',sid,{date:d.date,type:d.type,inspector:d.inspector.trim(),notes:d.notes.trim(),entries,createdAt:Date.now()},true)];
+    fails.forEach(e=>jobs.push(()=>put('items',e.itemId,{...S.items.get(e.itemId),status:'quar',updatedAt:Date.now()},true)));
+    if(!S.settings.inspector)jobs.push(()=>putSettings({...S.settings,inspector:d.inspector.trim()}));
+    await bulk(jobs,'Inspection saved. '+(entries.length-fails.length)+' passed'+(fails.length?', '+fails.length+' failed and quarantined.':'.'));
+  },
+  kit:async(d,f)=>{
+    const id=f.dataset.id||newId('k'),old=S.kits.get(id)||{};
+    if(await safe(()=>put('kits',id,{...old,name:d.name.trim(),assignee:d.assignee.trim(),notes:d.notes.trim()})))openKit(id);
+  },
+  settings:async d=>{
+    const cs=[...document.querySelectorAll('#catrows .catrow')].map(r=>({id:r.dataset.id,name:r.querySelector('[data-k=name]').value.trim(),interval:Math.max(0,+r.querySelector('[data-k=interval]').value||0),life:Math.max(0,+r.querySelector('[data-k=life]').value||0)})).filter(c=>c.name);
+    if(!cs.length)return toast('Keep at least one category.');
+    if(await safe(()=>putSettings({...S.settings,company:d.company.trim(),inspector:d.inspector.trim(),tagPrefix:d.tagPrefix.trim()||'GEAR-',cats:cs}),'Settings saved.'))M.reports(),refresh();
+  }
+};
+document.addEventListener('click',e=>{
+  if(e.target.id==='sheet')return closeSheet();
+  const b=e.target.closest('[data-a]'); if(b&&A[b.dataset.a])A[b.dataset.a](b.dataset,b);
+});
+document.addEventListener('submit',e=>{e.preventDefault();const f=e.target,fn=F[f.dataset.form];if(fn)fn(Object.fromEntries(new FormData(f)),f)});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#sheet').hidden)closeSheet()});
+window.addEventListener('hashchange',()=>{stopLive();route()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopLive()});
+
+/* ---------- scanning ---------- */
+function addCodes(list){
+  const have=new Set(S.batch.map(normCode));let add=0;
+  for(const c of list){const k=normCode(c);if(!k||have.has(k))continue;have.add(k);S.batch.push(c);add++}
+  refresh();
+  if(S.route==='scan')$('#scanmsg').textContent=list.length?(add+' added'+(list.length-add?', '+(list.length-add)+' already in the batch':'')+'. Keep scanning, or act on the batch below.'):'No code entered.';
+  return add;
+}
+const libP={};
+function lib(k){return libP[k]||(libP[k]=new Promise((res,rej)=>{const s=document.createElement('script');s.src=LIBS[k];s.onload=res;s.onerror=()=>{delete libP[k];rej(new Error('lib'))};document.head.appendChild(s)}))}
+async function toCanvas(file,max){
+  let src;
+  try{src=await createImageBitmap(file)}
+  catch(e){src=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=URL.createObjectURL(file)})}
+  const w=src.width,h=src.height,k=Math.min(1,max/Math.max(w,h)),c=document.createElement('canvas');
+  c.width=Math.round(w*k);c.height=Math.round(h*k);
+  c.getContext('2d',{willReadFrequently:true}).drawImage(src,0,0,c.width,c.height);
+  return c;
+}
+async function decodePhoto(file){
+  const out=[];
+  if('BarcodeDetector' in window){
+    try{const c=await toCanvas(file,2600);(await new BarcodeDetector().detect(c)).forEach(r=>r.rawValue&&out.push(r.rawValue))}catch(e){}
+    if(out.length)return out;
+  }
+  await lib('jsqr');
+  const c=await toCanvas(file,1700),ctx=c.getContext('2d',{willReadFrequently:true});
+  for(let i=0;i<40;i++){
+    const img=ctx.getImageData(0,0,c.width,c.height),r=jsQR(img.data,c.width,c.height);
+    if(!r)break;
+    if(r.data)out.push(r.data);
+    blank(ctx,r.location);
+    await wait(0);
+  }
+  return out;
+}
+function blank(ctx,L){   // paint over a decoded code so the next pass finds another
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.moveTo(L.topLeftCorner.x,L.topLeftCorner.y);
+  [L.topRightCorner,L.bottomRightCorner,L.bottomLeftCorner].forEach(p=>ctx.lineTo(p.x,p.y));ctx.closePath();ctx.fill();
+}
+let liveStream=null,liveOn=false,audio=null;
+function beep(){
+  try{navigator.vibrate&&navigator.vibrate(50)}catch(e){}
+  try{const o=audio.createOscillator(),g=audio.createGain();o.frequency.value=1250;g.gain.value=.08;o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+.07)}catch(e){}
+}
+function stopLive(){
+  liveOn=false;
+  if(liveStream){liveStream.getTracks().forEach(t=>t.stop());liveStream=null}
+  $('#livevid').srcObject=null;$('#live').hidden=true;
+}
+async function startLive(){
+  try{audio=audio||new (window.AudioContext||window.webkitAudioContext)()}catch(e){}
+  try{liveStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}})}
+  catch(e){return toast(e&&e.name==='NotAllowedError'?'Camera access is blocked. Allow the camera for this site, or use Photograph tags.':'No camera could be opened. Use Photograph tags instead.')}
+  let det=null;
+  if('BarcodeDetector' in window){try{det=new BarcodeDetector()}catch(e){}}
+  if(!det){try{await lib('jsqr')}catch(e){stopLive();return toast('The scanner couldn\'t load. Connect to the internet once, then try again.')}}
+  const v=$('#livevid'),el=$('#live'),c=document.createElement('canvas'),ctx=c.getContext('2d',{willReadFrequently:true});
+  v.srcObject=liveStream;el.hidden=false;try{await v.play()}catch(e){}
+  liveOn=true;$('#livecount').textContent=S.batch.length;$('#livelast').textContent='Point the camera at a tag';
+  const tick=async()=>{
+    if(!liveOn)return;
+    if(v.readyState>=2&&v.videoWidth){
+      let found=[];
+      try{
+        if(det)found=(await det.detect(v)).map(r=>r.rawValue).filter(Boolean);
+        else{
+          const k=Math.min(1,960/Math.max(v.videoWidth,v.videoHeight));c.width=v.videoWidth*k|0;c.height=v.videoHeight*k|0;ctx.drawImage(v,0,0,c.width,c.height);
+          for(let i=0;i<4;i++){const img=ctx.getImageData(0,0,c.width,c.height),r=jsQR(img.data,c.width,c.height,{inversionAttempts:'dontInvert'});if(!r)break;if(r.data)found.push(r.data);blank(ctx,r.location)}
+        }
+      }catch(e){}
+      if(liveOn&&found.length&&addCodes(parseCodes(found.join('\n')))){
+        const last=found[found.length-1],it=findByCode(all('items'),last);
+        beep();$('#livecount').textContent=S.batch.length;$('#livelast').textContent=it?it.name:'New: '+last;
+        el.classList.add('hit');setTimeout(()=>el.classList.remove('hit'),250);
+      }
+    }
+    setTimeout(tick,det?120:50);
+  };
+  tick();
+}
+async function readPhotos(files){
+  if(!files.length)return;
+  const msg=$('#scanmsg');let found=[],bad=0;
+  for(let i=0;i<files.length;i++){
+    msg.textContent='Reading photo '+(i+1)+' of '+files.length+'. Larger photos take a few seconds.';
+    try{found=found.concat(await decodePhoto(files[i]))}catch(e){bad++}
+  }
+  if(bad&&!found.length){msg.textContent='That photo couldn\'t be read. Check your connection and try again, or type the code.';return}
+  if(!found.length){msg.textContent='No codes found. Move closer so each tag is sharp and well lit, and keep to about a dozen tags per photo.';return}
+  addCodes(parseCodes(found.join('\n')));
+}
+
+/* ---------- exports ---------- */
+async function saveFile(filename,data){
+  if(!HOSTED){
+    try{const a=document.createElement('a'),b=data instanceof Blob?data:new Blob([data]);a.href=URL.createObjectURL(b);a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),20000);toast('Saved '+filename)}
+    catch(e){toast('Couldn\'t save the file. Try again.')}
+    return;
+  }
+  const dl=await use('downloads');
+  if(!dl){
+    if(typeof data==='string')sheet('<h2>'+esc(filename)+'</h2><p class="hint">Saving files isn\'t available in this view. Copy the contents instead.</p><label class="vh" for="out">File contents</label><textarea id="out" readonly style="min-height:200px;font:12px var(--mono)">'+esc(data)+'</textarea><button class="btn pri" data-a="copyOut">Copy</button>');
+    else toast('Saving files isn\'t available in this view.');
+    return;
+  }
+  try{await dl.save({filename,data});toast('Saved '+filename)}
+  catch(e){if(!e||e.code!=='declined')toast('Couldn\'t save the file. Try again.')}
+}
+function registerRows(full){
+  const rows=[full?['Tag','Item','Category','Serial','Manufacturer','Model','Manufactured','First use','Kit','Status','Last inspection','Result','Next due','Retire by','Notes']:['Tag','Item','Category','Serial','Manufactured','Last inspection','Result','Next due','Status']];
+  all('items').filter(i=>full||i.status!=='retired').sort((a,b)=>(catById(a.cat)||{name:'~'}).name.localeCompare((catById(b.cat)||{name:'~'}).name)||a.name.localeCompare(b.name)).forEach(i=>{
+    const st=stateOf(i),c=catById(i.cat),k=S.kits.get(i.kit),res=st.last?(st.last.result==='fail'?'Fail':'Pass'):'';
+    rows.push(full?[i.tag,i.name,c?c.name:'',i.serial,i.maker,i.model,i.mfgDate,i.firstUse,k?k.name:'',st.label,st.last?st.last.date:'',res,st.nextDue||'',st.retireOn||'',i.notes]
+      :[i.tag||'',i.name,c?c.name:'',i.serial||'',fmtDate(i.mfgDate),st.last?fmtDate(st.last.date):'',res,fmtDate(st.nextDue),st.label]);
+  });
+  return rows;
+}
+async function pdf(title,filename,sub,rows,signer){
+  toast('Building PDF',true);
+  try{await lib('pdf')}catch(e){return toast('The PDF builder couldn\'t load. Check your connection.')}
+  const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'mm',format:'a4'}),W=277,x0=10;
+  const wts={Item:2.2,Category:1.5,Tag:1.2,Serial:1.3},ws=rows[0].map(h=>wts[h]||0.9),tot=ws.reduce((a,b)=>a+b,0),cw=ws.map(w=>w/tot*W);
+  let y,page=0;
+  const line=(cells,bold)=>{doc.setFont('helvetica',bold?'bold':'normal');let x=x0;cells.forEach((v,i)=>{doc.text(doc.splitTextToSize(String(v==null?'':v),cw[i]-2)[0]||'',x+1,y);x+=cw[i]})};
+  const head=()=>{
+    page++;doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text(title,x0,14);
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text([S.settings.company,sub].filter(Boolean).join('   |   '),x0,20,{maxWidth:W});
+    doc.text('Page '+page,x0+W,14,{align:'right'});
+    doc.setFillColor(225);doc.rect(x0,25,W,7,'F');doc.setFontSize(8);y=29.8;line(rows[0],true);y=37;
+  };
+  head();
+  rows.slice(1).forEach(r=>{if(y>196){doc.addPage();head()}line(r,false);doc.setDrawColor(205);doc.line(x0,y+1.6,x0+W,y+1.6);y+=5.6});
+  if(y>182){doc.addPage();head()}
+  y+=12;doc.setFontSize(9);doc.setFont('helvetica','normal');
+  doc.text('Inspected by: '+(signer||S.settings.inspector||'______________________')+'        Signature: ______________________        Date: ______________',x0,y);
+  await saveFile(filename,doc.output('blob'));
+}
+async function makeLabels(){
+  const its=all('items').filter(i=>i.tag&&i.status!=='retired').sort((a,b)=>a.tag.localeCompare(b.tag,undefined,{numeric:true}));
+  if(!its.length)return toast('No tagged gear yet. Give items a tag code first.');
+  try{await lib('qr')}catch(e){return toast('The QR builder couldn\'t load. Check your connection.')}
+  const cells=its.map(i=>{const q=qrcode(0,'M');q.addData(i.tag);q.make();return '<div class="l">'+q.createSvgTag(3,6)+'<b>'+esc(i.tag)+'</b><span>'+esc(i.name)+'</span></div>'}).join('');
+  await saveFile('gear-qr-labels.html','<!DOCTYPE html><html><head><meta charset="utf-8"><title>Gear QR labels</title><style>@page{margin:8mm}body{font:10px Arial,sans-serif;margin:0}.g{display:grid;grid-template-columns:repeat(5,1fr);gap:3mm}.l{border:1px dashed #999;padding:2mm;text-align:center;break-inside:avoid}.l svg{width:26mm;height:26mm;display:block;margin:0 auto}.l b{display:block;font:bold 11px monospace}.l span{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}</style></head><body><div class="g">'+cells+'</div></body></html>');
+}
+async function importCSV(file){
+  const rows=parseCSV(await file.text()); if(rows.length<2)return toast('That file has no rows under the headings.');
+  const alias={name:['name','item','description'],cat:['category','type'],tag:['tag','tag code','id','asset id'],serial:['serial','serial number','serial no'],maker:['manufacturer','make','brand'],model:['model'],mfgDate:['manufactured','date of manufacture','mfg date','dom'],firstUse:['first use','date of first use','in service'],kit:['kit','bag']};
+  const hd=rows[0].map(h=>h.trim().toLowerCase()),col={};
+  for(const k in alias)col[k]=hd.findIndex(h=>alias[k].includes(h));
+  if(col.name<0)return toast('The file needs a column headed "name".');
+  const cs=cats().map(c=>({...c})),kitByName=new Map(all('kits').map(k=>[k.name.toLowerCase(),k.id])),have=new Set(all('items').map(i=>normCode(i.tag)).filter(Boolean)),jobs=[];
+  let catsChanged=false,skip=0,n=0;
+  rows.slice(1).forEach(r=>{
+    const g=k=>col[k]<0?'':String(r[col[k]]||'').trim(),name=g('name'),tag=g('tag');
+    if(!name||(tag&&have.has(normCode(tag)))){skip++;return}
+    if(tag)have.add(normCode(tag));
+    let c=cs.find(c=>c.name.toLowerCase()===g('cat').toLowerCase());
+    if(!c&&g('cat')){c={id:newId('c'),name:g('cat'),interval:6,life:0};cs.push(c);catsChanged=true}
+    let kit='';
+    if(g('kit')){kit=kitByName.get(g('kit').toLowerCase());if(!kit){kit=newId('k');kitByName.set(g('kit').toLowerCase(),kit);const kid=kit,kn=g('kit');jobs.unshift(()=>put('kits',kid,{name:kn,assignee:'',notes:''},true))}}
+    const it={name,cat:c?c.id:cs[0].id,tag,serial:g('serial'),maker:g('maker'),model:g('model'),mfgDate:parseDate(g('mfgDate')),firstUse:parseDate(g('firstUse')),kit,notes:'',status:'in',createdAt:Date.now(),updatedAt:Date.now()};
+    n++;jobs.push(()=>put('items',newId('i'),it,true));
+  });
+  if(catsChanged)jobs.unshift(()=>putSettings({...S.settings,cats:cs}));
+  if(!n)return toast('Nothing new to import. '+skip+' rows skipped.');
+  await bulk(jobs,n+' items imported'+(skip?', '+skip+' skipped as blank or duplicate tags.':'.'));
+}
+async function restore(file){
+  let j;try{j=JSON.parse(await file.text())}catch(e){}
+  if(!j||j.app!=='gear-register'||!Array.isArray(j.items))return toast('That file isn\'t a gear register backup.');
+  const jobs=[];
+  for(const k of ['kits','items','insp'])(j[k]||[]).forEach(p=>jobs.push(()=>put(k,p[0],p[1],true)));
+  if(j.settings&&Object.keys(j.settings).length)jobs.push(()=>putSettings(j.settings));
+  if(!jobs.length)return toast('That backup is empty.');
+  await bulk(jobs,'Backup restored. Records with the same ID were replaced.');M.reports();refresh();
+}
+async function loadExamples(){
+  if(all('items').some(i=>i.example))return toast('Example gear is already loaded.');
+  const t=todayStr(),ago=m=>addMonths(t,-m),kid=newId('k'),ids=[],mk=(name,cat,tag,serial,maker,model,mfg,extra)=>{const id=newId('i')+ids.length;ids.push(id);return [id,{name,cat,tag,serial,maker,model,mfgDate:mfg,firstUse:addMonths(mfg,2),kit:kid,notes:'Example record',status:'in',example:true,createdAt:Date.now(),updatedAt:Date.now(),...extra}]};
+  const ex=[
+    mk('Petzl ASTRO BOD FAST harness','harness','EXAMPLE-01','23E0048112','Petzl','ASTRO BOD FAST',ago(30)),
+    mk('Petzl VERTEX VENT helmet','helmet','EXAMPLE-02','22K0113377','Petzl','VERTEX VENT',ago(114)),
+    mk('Static rope 11 mm x 50 m','rope','EXAMPLE-03','R50-0412','','11 mm low stretch',ago(20)),
+    mk('Petzl I\'D S descender','descender','EXAMPLE-04','21C0096541','Petzl','I\'D S',ago(50)),
+    mk('Petzl ASAP LOCK backup','backup','EXAMPLE-05','20L0071230','Petzl','ASAP LOCK',ago(60)),
+    mk('Petzl CROLL L chest ascender','ascender','EXAMPLE-06','22B0030019','Petzl','CROLL L',ago(40)),
+    mk('Steel screwgate karabiner','connector','EXAMPLE-07','K-7781','','Steel oval',ago(44)),
+    mk('Round sling 2 t x 2 m','lifting','EXAMPLE-08','RS2-1190','','2 t WLL',ago(26),{kit:''})
+  ];
+  const ent=i=>({itemId:ex[i][0],result:'pass',tag:ex[i][1].tag,name:ex[i][1].name});
+  const jobs=[()=>put('kits',kid,{name:'Example rope access kit',assignee:'Example technician',notes:'',example:true},true)].concat(ex.map(e=>()=>put('items',e[0],e[1],true)));
+  jobs.push(()=>put('insp',newId('s'),{date:ago(7),type:'periodic',inspector:'Example inspector',notes:'Example record',entries:[ent(0),ent(1),ent(2),ent(7)],createdAt:Date.now(),example:true},true));
+  jobs.push(()=>put('insp',newId('s')+'b',{date:todayStr(new Date(Date.now()-168*864e5)),type:'periodic',inspector:'Example inspector',notes:'Example record',entries:[ent(3),ent(4),ent(5)],createdAt:Date.now()+1,example:true},true));
+  await bulk(jobs,'Example gear loaded. Remove it any time under Reports.');
+}
+
+/* ---------- start ---------- */
+function start(saved){
+  if(saved&&Array.isArray(saved.batch))S.batch=saved.batch;
+  route();init();
+}
+async function init(){
+  const d=await use('db');
+  if(!d){
+    try{const j=JSON.parse(localStorage.getItem('gearreg.v1')||'null');if(j){S.items=new Map(j.items);S.kits=new Map(j.kits);S.insp=new Map(j.insp);S.settings=j.settings||{}}}catch(e){}
+    S.mode='local';S.ready=true;mount();
+    try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
+    try{if(!HOSTED&&'serviceWorker' in navigator&&/^https?:$/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}
+    return;
+  }
+  db=d;const got=new Set();
+  const slow=setTimeout(()=>{if(!S.ready){S.slow=true;refresh()}},10000);
+  const done=k=>{got.add(k);if(!S.ready&&got.size===4){S.ready=true;S.mode='cloud';clearTimeout(slow);mount()}else if(S.ready)refresh()};
+  const fail=()=>{clearTimeout(slow);if(!S.ready){S.slow=true;refresh()}toast('Your saved gear can\'t be reached right now. Reopen the page to try again.',true)};
+  for(const k of ['items','kits','insp'])db.collection(PATH[k]).onSnapshot(s=>{S[k]=new Map(s.docs.map(x=>[x.id,x.data()]));done(k)},fail);
+  db.doc('meta/settings').onSnapshot(s=>{S.settings=s.exists?s.data():{};done('settings')},fail);
+}
+const hot=window.claude&&window.claude.hot;
+if(hot&&hot.snapshot)hot.snapshot(()=>({batch:S.batch}));
+if(hot&&hot.ready)hot.ready(start);else start((hot&&hot.data)||{});
+</script>
+</body>
+</html>
